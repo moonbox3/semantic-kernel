@@ -1,0 +1,95 @@
+# Copyright (c) Microsoft. All rights reserved.
+
+from typing import Dict, Any
+
+from pydantic import Field, root_validator
+
+from semantic_kernel.plugin_definition.kernel_plugin import KernelPlugin
+from semantic_kernel.orchestration.sk_function_base import SKFunctionBase
+
+
+class DefaultKernelPlugin(KernelPlugin):
+    """
+    Represents a Kernel Plugin with functions.
+
+    Attributes:
+        functions (Dict[str, SKFunctionBase]): The functions in the plugin,
+            indexed by their name. Although this is a dictionary, the user
+            should pass a list of SKFunctionBase instances when initializing,
+            and they will be automatically converted to a dictionary.
+        name (str): The name of the plugin.
+        description (str): The description of the plugin.
+    """
+
+    # Todo: this needs to be converted to a KernelFunction type
+    functions: Dict[str, SKFunctionBase] = Field(default_factory=dict)
+
+    @root_validator(pre=True)
+    def list_to_dict(cls, values):
+        """
+        A root validator to construct the functions dictionary from the functions list.
+
+        Args:
+            values (Dict[str, Any]): The values to validate.
+
+        Returns:
+            The values, with the functions list converted to a dictionary.
+
+        Raises:
+            ValueError: If the functions list contains duplicate function names.
+        """
+        functions_list = values.get("functions", [])
+        seen = set()
+        functions_dict = {}
+
+        for function in functions_list:
+            if function.name in seen:
+                raise ValueError(f"Duplicate function name detected: {function.name}")
+            seen.add(function.name)
+            functions_dict[function.name] = function
+
+        values["functions"] = functions_dict
+        return values
+
+    def get_function_count(self) -> int:
+        """
+        Gets the number of functions in the plugin.
+
+        Returns:
+            The number of functions in the plugin.
+
+        """
+        return len(self.functions)
+
+    def has_function(self, function_name: str) -> bool:
+        """
+        Checks if the plugin contains a function with the specified name.
+
+        Args:
+            function_name (str): The name of the function.
+
+        Returns:
+            True if the plugin contains a function with the specified name, False otherwise.
+        """
+        return function_name in self.functions.keys()
+
+    def get_function(self, function_name: str):
+        """
+        Gets the function in the plugin with the specified name.
+
+        Args:
+            function_name (str): The name of the function.
+
+        Returns:
+            The function.
+
+        Raises:
+            KeyError: If the plugin does not contain a function with the specified name.
+        """
+        try:
+            return self.functions[function_name]
+        except KeyError:
+            raise KeyError(
+                f"The plugin does not contain a function with the specified name. "
+                f"Plugin name: {self.name}, function name: {function_name}"
+            )
