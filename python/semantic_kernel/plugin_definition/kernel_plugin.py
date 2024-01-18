@@ -1,19 +1,46 @@
 # Copyright (c) Microsoft. All rights reserved.
 
+from typing import Dict, Any
 from semantic_kernel.sk_pydantic import SKBaseModel
-from abc import ABC
+from abc import ABC, abstractmethod
 import re
+from pydantic import Field, field_validator
+from semantic_kernel.orchestration.sk_function import SKFunction
 
-from pydantic import Field, field_validator, model_validator
 
-class KernelPluginBase(SKBaseModel, ABC):
+class KernelPlugin(SKBaseModel, ABC):
+    """
+    The KernelPlugin Base Class. All plugins must inherit from this class.
+
+    Attributes:
+
+        name (str): The name of the plugin.
+        description (str): The description of the plugin.
+    """
 
     name: str
-    description: str
+    description: str = Field(default="")
 
-    @field_validator('name', mode="after")
+    @field_validator("name", mode="after")
     @classmethod
     def name_must_be_valid(cls, v: str) -> str:
-        if ' ' not in v:
-            raise ValueError('must contain a space')
-        return v.title()
+        """Validates that the name contains only uppercase, lowercase letters, or underscores."""
+        pattern = r"^[A-Za-z_]+$"
+        if not re.match(pattern, v):
+            raise ValueError("Name must contain only uppercase, lowercase letters, or underscores")
+        return v
+
+    @abstractmethod
+    def get_function_count(self) -> int:
+        """Gets the number of functions in the plugin."""
+        pass
+
+    @abstractmethod
+    def has_function(self, function_name: str) -> bool:
+        """Checks if the plugin contains a function with the specified name."""
+        pass
+
+    @abstractmethod
+    def get_function(self, function_name: str):
+        """Gets the function in the plugin with the specified name."""
+        pass
