@@ -7,8 +7,8 @@ from semantic_kernel.orchestration.context_variables import ContextVariables
 from semantic_kernel.orchestration.delegate_types import DelegateTypes
 from semantic_kernel.orchestration.sk_context import SKContext
 from semantic_kernel.orchestration.sk_function import SKFunction
-from semantic_kernel.plugin_definition.read_only_plugin_collection_base import (
-    ReadOnlyPluginCollectionBase,
+from semantic_kernel.plugin_definition.kernel_plugin_collection import (
+    KernelPluginCollection,
 )
 from semantic_kernel.template_engine.blocks.block_types import BlockTypes
 from semantic_kernel.template_engine.blocks.code_block import CodeBlock
@@ -19,7 +19,7 @@ from semantic_kernel.template_engine.blocks.var_block import VarBlock
 
 class TestCodeBlock:
     def setup_method(self):
-        self.plugins = Mock(spec=ReadOnlyPluginCollectionBase)
+        self.plugins = Mock(spec=KernelPluginCollection)
 
     @mark.asyncio
     async def test_it_throws_if_a_function_doesnt_exist(self):
@@ -29,7 +29,8 @@ class TestCodeBlock:
             plugin_collection=self.plugins,
         )
         # Make it so our self.plugins mock's `has_function` method returns False
-        self.plugins.has_function.return_value = False
+        # TODO update with KernelFunctionMetadata which will have this
+        #self.plugins.has_function.return_value = False
         target = CodeBlock(
             content="functionName",
         )

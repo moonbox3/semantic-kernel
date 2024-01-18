@@ -18,11 +18,9 @@ from semantic_kernel.planning.sequential_planner.sequential_planner_extensions i
 )
 from semantic_kernel.plugin_definition.function_view import FunctionView
 from semantic_kernel.plugin_definition.functions_view import FunctionsView
-from semantic_kernel.plugin_definition.plugin_collection import PluginCollection
-from semantic_kernel.plugin_definition.read_only_plugin_collection_base import (
-    ReadOnlyPluginCollectionBase,
+from semantic_kernel.plugin_definition.kernel_plugin_collection import (
+    KernelPluginCollection,
 )
-
 
 async def _async_generator(query_result):
     yield query_result
@@ -31,7 +29,7 @@ async def _async_generator(query_result):
 @pytest.mark.asyncio
 async def test_can_call_get_available_functions_with_no_functions_async():
     variables = ContextVariables()
-    plugins = PluginCollection()
+    plugins = KernelPluginCollection()
 
     memory = Mock(spec=SemanticTextMemoryBase)
     memory_query_result = MemoryQueryResult(
@@ -49,7 +47,7 @@ async def test_can_call_get_available_functions_with_no_functions_async():
     memory.search_async.return_value = async_enumerable
 
     # Arrange GetAvailableFunctionsAsync parameters
-    context = SKContext(variables, memory, plugins.read_only_plugin_collection)
+    context = SKContext(variables, memory, plugins)
     config = SequentialPlannerConfig()
     semantic_query = "test"
 
@@ -86,7 +84,7 @@ async def test_can_call_get_available_functions_with_functions_async():
     functions_view.add_function(function_view)
     functions_view.add_function(native_function_view)
 
-    plugins = Mock(spec=ReadOnlyPluginCollectionBase)
+    plugins = Mock(spec=KernelPluginCollection)
     plugins.get_function.return_value = function_mock
     plugins.get_functions_view.return_value = functions_view
 
@@ -172,10 +170,10 @@ async def test_can_call_get_available_functions_with_functions_and_relevancy_asy
     memory = Mock(spec=SemanticTextMemoryBase)
     memory.search_async.return_value = _async_generator(memory_query_result)
 
-    plugins = Mock(spec=ReadOnlyPluginCollectionBase)
+    plugins = Mock(spec=KernelPluginCollection)
     plugins.get_function.return_value = function_mock
     plugins.get_functions_view.return_value = functions_view
-    plugins.read_only_plugin_collection = plugins
+    plugins = plugins
 
     # Arrange GetAvailableFunctionsAsync parameters
     context = SKContext.model_construct(
@@ -212,7 +210,7 @@ async def test_can_call_get_available_functions_with_functions_and_relevancy_asy
 async def test_can_call_get_available_functions_async_with_default_relevancy_async():
     # Arrange
     variables = ContextVariables()
-    plugins = PluginCollection()
+    plugins = KernelPluginCollection()
 
     # Arrange Mock Memory and Result
     memory_query_result = MemoryQueryResult(

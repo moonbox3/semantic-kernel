@@ -25,12 +25,12 @@ from semantic_kernel.orchestration.delegate_types import DelegateTypes
 from semantic_kernel.orchestration.sk_function_base import SKFunctionBase
 from semantic_kernel.plugin_definition.function_view import FunctionView
 from semantic_kernel.plugin_definition.parameter_view import ParameterView
-from semantic_kernel.plugin_definition.read_only_plugin_collection_base import (
-    ReadOnlyPluginCollectionBase,
-)
 from semantic_kernel.semantic_functions.chat_prompt_template import ChatPromptTemplate
 from semantic_kernel.semantic_functions.semantic_function_config import (
     SemanticFunctionConfig,
+)
+from semantic_kernel.plugin_definition.kernel_plugin_collection import (
+    KernelPluginCollection,
 )
 
 if TYPE_CHECKING:
@@ -51,7 +51,7 @@ class SKFunction(SKFunctionBase):
     _parameters: List[ParameterView]
     _delegate_type: DelegateTypes
     _function: Callable[..., Any]
-    _plugin_collection: Optional[ReadOnlyPluginCollectionBase]
+    _plugin_collection: Optional[KernelPluginCollection]
     _ai_service: Optional[Union[TextCompletionClientBase, ChatCompletionClientBase]]
     _ai_request_settings: AIRequestSettings
     _chat_prompt_template: ChatPromptTemplate
@@ -276,10 +276,6 @@ class SKFunction(SKFunctionBase):
         self._ai_request_settings = AIRequestSettings()
         self._chat_prompt_template = kwargs.get("chat_prompt_template", None)
 
-    def set_default_plugin_collection(self, plugins: ReadOnlyPluginCollectionBase) -> "SKFunction":
-        self._plugin_collection = plugins
-        return self
-
     def set_ai_service(self, ai_service: Callable[[], TextCompletionClientBase]) -> "SKFunction":
         if ai_service is None:
             raise ValueError("AI LLM service factory cannot be `None`")
@@ -353,7 +349,7 @@ class SKFunction(SKFunctionBase):
         if context is None:
             context = SKContext(
                 variables=ContextVariables("") if variables is None else variables,
-                plugin_collection=self._plugin_collection,
+                plugins=self._plugin_collection,
                 memory=memory if memory is not None else NullMemory.instance,
             )
         else:
@@ -400,7 +396,7 @@ class SKFunction(SKFunctionBase):
         if context is None:
             context = SKContext(
                 variables=ContextVariables("") if variables is None else variables,
-                plugin_collection=self._plugin_collection,
+                plugins=self._plugin_collection,
                 memory=memory if memory is not None else NullMemory.instance,
             )
         else:
@@ -475,7 +471,7 @@ class SKFunction(SKFunctionBase):
         if context is None:
             context = SKContext(
                 variables=ContextVariables("") if variables is None else variables,
-                plugin_collection=self._plugin_collection,
+                plugins=self._plugin_collection,
                 memory=memory if memory is not None else NullMemory.instance,
             )
         else:

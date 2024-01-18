@@ -13,12 +13,12 @@ class DefaultKernelPlugin(KernelPlugin):
     Represents a Kernel Plugin with functions.
 
     Attributes:
+        name (str): The name of the plugin.
+        description (str): The description of the plugin.
         functions (Dict[str, SKFunctionBase]): The functions in the plugin,
             indexed by their name. Although this is a dictionary, the user
             should pass a list of SKFunctionBase instances when initializing,
             and they will be automatically converted to a dictionary.
-        name (str): The name of the plugin.
-        description (str): The description of the plugin.
     """
 
     # Todo: this needs to be converted to a KernelFunction type
@@ -93,3 +93,15 @@ class DefaultKernelPlugin(KernelPlugin):
                 f"The plugin does not contain a function with the specified name. "
                 f"Plugin name: {self.name}, function name: {function_name}"
             )
+        
+    def from_function(function: SKFunctionBase) -> "DefaultKernelPlugin":
+        """
+        Creates a DefaultKernelPlugin from a SKFunctionBase instance.
+
+        Args:
+            function (SKFunctionBase): The function to create the plugin from.
+
+        Returns:
+            A DefaultKernelPlugin instance.
+        """
+        return DefaultKernelPlugin(name=function.name, description=function.description, functions=[function])

@@ -5,7 +5,6 @@ from semantic_kernel.sk_pydantic import SKBaseModel
 from abc import ABC, abstractmethod
 import re
 from pydantic import Field, field_validator
-from semantic_kernel.orchestration.sk_function import SKFunction
 
 
 class KernelPlugin(SKBaseModel, ABC):

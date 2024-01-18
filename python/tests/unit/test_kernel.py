@@ -28,7 +28,7 @@ async def test_run_async_handles_pre_invocation(pipeline_count):
 
     mock_function = create_mock_function("test_function")
     mock_function.invoke_async = AsyncMock(side_effect=lambda input, context: context)
-    kernel._plugin_collection.add_semantic_function(mock_function)
+    kernel.plugins.add_semantic_function(mock_function)
 
     invoked = 0
 

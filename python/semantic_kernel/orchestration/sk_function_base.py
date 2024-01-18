@@ -14,9 +14,6 @@ from semantic_kernel.sk_pydantic import SKBaseModel
 
 if TYPE_CHECKING:
     from semantic_kernel.orchestration.sk_context import SKContext
-    from semantic_kernel.plugin_definition.read_only_plugin_collection_base import (
-        ReadOnlyPluginCollectionBase,
-    )
 
 
 class SKFunctionBase(SKBaseModel):
@@ -136,24 +133,6 @@ class SKFunctionBase(SKBaseModel):
         Returns:
             SKContext -- The updated context, potentially a new one if
             context switching is implemented.
-        """
-        pass
-
-    @abstractmethod
-    def set_default_plugin_collection(
-        self,
-        plugins: "ReadOnlyPluginCollectionBase",
-    ) -> "SKFunctionBase":
-        """
-        Sets the plugin collection to use when the function is
-        invoked without a context or with a context that doesn't have
-        a plugin collection
-
-        Arguments:
-            plugins {ReadOnlyPluginCollectionBase} -- Kernel's plugin collection
-
-        Returns:
-            SKFunctionBase -- The function instance
         """
         pass
 

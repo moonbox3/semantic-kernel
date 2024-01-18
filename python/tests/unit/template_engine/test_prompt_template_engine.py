@@ -9,8 +9,8 @@ from semantic_kernel.orchestration.context_variables import ContextVariables
 from semantic_kernel.orchestration.sk_context import SKContext
 from semantic_kernel.orchestration.sk_function import SKFunction
 from semantic_kernel.plugin_definition import sk_function
-from semantic_kernel.plugin_definition.read_only_plugin_collection import (
-    ReadOnlyPluginCollection,
+from semantic_kernel.plugin_definition.kernel_plugin_collection import (
+    KernelPluginCollection,
 )
 from semantic_kernel.template_engine.blocks.block_types import BlockTypes
 from semantic_kernel.template_engine.prompt_template_engine import PromptTemplateEngine
@@ -28,7 +28,7 @@ def variables():
 
 @fixture
 def plugins():
-    return Mock(spec=ReadOnlyPluginCollection)
+    return Mock(spec=KernelPluginCollection)
 
 
 @fixture

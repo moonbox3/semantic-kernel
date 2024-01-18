@@ -11,12 +11,7 @@ from semantic_kernel.memory.semantic_text_memory_base import (
     SemanticTextMemoryT,
 )
 from semantic_kernel.orchestration.context_variables import ContextVariables
-from semantic_kernel.plugin_definition.read_only_plugin_collection import (
-    ReadOnlyPluginCollection,
-)
-from semantic_kernel.plugin_definition.read_only_plugin_collection_base import (
-    ReadOnlyPluginCollectionBase,
-)
+from semantic_kernel.plugin_definition.kernel_plugin_collection import KernelPluginCollection
 from semantic_kernel.sk_pydantic import SKBaseModel
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -28,7 +23,7 @@ class SKContext(SKBaseModel, Generic[SemanticTextMemoryT]):
     memory: SemanticTextMemoryT
     variables: ContextVariables
     # This field can be used to hold anything that is not a string
-    plugin_collection: ReadOnlyPluginCollection = Field(default_factory=ReadOnlyPluginCollection)
+    plugins: KernelPluginCollection = Field(default_factory=KernelPluginCollection)
     _objects: Dict[str, Any] = PrivateAttr(default_factory=dict)
     _error_occurred: bool = PrivateAttr(False)
     _last_exception: Optional[Exception] = PrivateAttr(None)
@@ -38,7 +33,7 @@ class SKContext(SKBaseModel, Generic[SemanticTextMemoryT]):
         self,
         variables: ContextVariables,
         memory: SemanticTextMemoryBase,
-        plugin_collection: Union[ReadOnlyPluginCollection, None],
+        plugins: Union[KernelPluginCollection, None],
         **kwargs,
         # TODO: cancellation token?
     ) -> None:
@@ -48,15 +43,15 @@ class SKContext(SKBaseModel, Generic[SemanticTextMemoryT]):
         Arguments:
             variables {ContextVariables} -- The context variables.
             memory {SemanticTextMemoryBase} -- The semantic text memory.
-            plugin_collection {ReadOnlyPluginCollectionBase} -- The plugin collection.
+            plugins {KernelPluginCollection} -- The plugin collection.
         """
         if kwargs.get("logger"):
             logger.warning("The `logger` parameter is deprecated. Please use the `logging` module instead.")
 
-        if plugin_collection is None:
-            plugin_collection = ReadOnlyPluginCollection()
+        if plugins is None:
+            plugins = KernelPluginCollection()
 
-        super().__init__(variables=variables, memory=memory, plugin_collection=plugin_collection)
+        super().__init__(variables=variables, memory=memory, plugins=plugins)
 
     def fail(self, error_description: str, exception: Optional[Exception] = None):
         """
@@ -126,21 +121,21 @@ class SKContext(SKBaseModel, Generic[SemanticTextMemoryT]):
         return self._objects
 
     @property
-    def plugins(self) -> ReadOnlyPluginCollectionBase:
+    def plugins(self) -> KernelPluginCollection:
         """
         Read only plugins collection.
 
         Returns:
-            ReadOnlyPluginCollectionBase -- The plugins collection.
+            KernelPluginCollection -- The plugins collection.
         """
-        return self.plugin_collection
+        return self.plugins
 
     @plugins.setter
-    def plugins(self, value: ReadOnlyPluginCollectionBase) -> None:
+    def plugins(self, value: KernelPluginCollection) -> None:
         """
         Set the value of plugins collection
         """
-        self.plugin_collection = value
+        self.plugins = value
 
     def __setitem__(self, key: str, value: Any) -> None:
         """
@@ -177,58 +172,17 @@ class SKContext(SKBaseModel, Generic[SemanticTextMemoryT]):
         Returns:
             SKFunctionBase -- The function.
         """
-        if self.plugin_collection is None:
+        if self.plugins is None:
             raise ValueError("The plugin collection hasn't been set")
-        assert self.plugin_collection is not None  # for type checker
+        assert self.plugins is not None  # for type checker
 
-        if self.plugin_collection.has_native_function(plugin_name, function_name):
-            return self.plugin_collection.get_native_function(plugin_name, function_name)
+        if self.plugins.has_native_function(plugin_name, function_name):
+            return self.plugins.get_native_function(plugin_name, function_name)
 
-        return self.plugin_collection.get_semantic_function(plugin_name, function_name)
+        return self.plugins.get_semantic_function(plugin_name, function_name)
 
     def __str__(self) -> str:
         if self._error_occurred:
             return f"Error: {self._last_error_description}"
 
         return self.result
-
-    def throw_if_plugin_collection_not_set(self) -> None:
-        """
-        Throws an exception if the plugin collection hasn't been set.
-        """
-        if self.plugin_collection is None:
-            raise KernelException(
-                KernelException.ErrorCodes.PluginCollectionNotSet,
-                "Plugin collection not found in the context",
-            )
-
-    def is_function_registered(
-        self, plugin_name: str, function_name: str
-    ) -> Union[Tuple[Literal[True], Any], Tuple[Literal[False], None]]:
-        """
-        Checks whether a function is registered in this context.
-
-        Arguments:
-            plugin_name {str} -- The plugin name.
-            function_name {str} -- The function name.
-
-        Returns:
-            Tuple[bool, SKFunctionBase] -- A tuple with a boolean indicating
-            whether the function is registered and the function itself (or None).
-        """
-        self.throw_if_plugin_collection_not_set()
-        assert self.plugin_collection is not None  # for type checker
-
-        if self.plugin_collection.has_native_function(plugin_name, function_name):
-            the_func = self.plugin_collection.get_native_function(plugin_name, function_name)
-            return True, the_func
-
-        if self.plugin_collection.has_native_function(None, function_name):
-            the_func = self.plugin_collection.get_native_function(None, function_name)
-            return True, the_func
-
-        if self.plugin_collection.has_semantic_function(plugin_name, function_name):
-            the_func = self.plugin_collection.get_semantic_function(plugin_name, function_name)
-            return True, the_func
-
-        return False, None

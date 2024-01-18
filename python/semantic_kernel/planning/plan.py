@@ -20,11 +20,8 @@ from semantic_kernel.orchestration.context_variables import ContextVariables
 from semantic_kernel.orchestration.sk_context import SKContext
 from semantic_kernel.orchestration.sk_function_base import SKFunctionBase
 from semantic_kernel.plugin_definition.function_view import FunctionView
-from semantic_kernel.plugin_definition.read_only_plugin_collection import (
-    ReadOnlyPluginCollection,
-)
-from semantic_kernel.plugin_definition.read_only_plugin_collection_base import (
-    ReadOnlyPluginCollectionBase,
+from semantic_kernel.plugin_definition.kernel_plugin_collection import (
+    KernelPluginCollection,
 )
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -148,7 +145,7 @@ class Plan(SKFunctionBase):
         if context is None:
             context = SKContext(
                 variables=self._state,
-                plugin_collection=ReadOnlyPluginCollection(),
+                plugins=KernelPluginCollection(),
                 memory=memory or NullMemory(),
             )
 
@@ -188,7 +185,7 @@ class Plan(SKFunctionBase):
         if context is None:
             context = SKContext(
                 variables=self._state,
-                plugin_collection=ReadOnlyPluginCollection(),
+                plugins=KernelPluginCollection(),
                 memory=memory or NullMemory(),
             )
 
@@ -232,13 +229,6 @@ class Plan(SKFunctionBase):
     def set_ai_service(self, service: Callable[[], TextCompletionClientBase]) -> SKFunctionBase:
         if self._function is not None:
             self._function.set_ai_service(service)
-
-    def set_default_plugin_collection(
-        self,
-        plugins: ReadOnlyPluginCollectionBase,
-    ) -> SKFunctionBase:
-        if self._function is not None:
-            self._function.set_default_plugin_collection(plugins)
 
     def describe(self) -> FunctionView:
         return self._function.describe()
@@ -306,7 +296,7 @@ class Plan(SKFunctionBase):
             func_context = SKContext(
                 variables=variables,
                 memory=context.memory,
-                plugin_collection=context.plugins,
+                plugins=context.plugins,
             )
             result = await step.invoke_async(context=func_context)
             result_value = result.result

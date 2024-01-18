@@ -34,7 +34,7 @@ def create_kernel_and_functions_mock(functions) -> Kernel:
         result = kernel.create_new_context()
         result.variables.update(result_string)
         mock_function.invoke_async.return_value = result
-        kernel._plugin_collection.add_semantic_function(mock_function)
+        kernel.plugins.add_semantic_function(mock_function)
 
     return kernel
 
