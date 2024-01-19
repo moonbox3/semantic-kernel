@@ -1,10 +1,11 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-from typing import Dict, Any
+from typing import Any, Dict, List
 from semantic_kernel.sk_pydantic import SKBaseModel
 from abc import ABC, abstractmethod
 import re
 from pydantic import Field, field_validator
+from semantic_kernel.functions.kernel_function_metadata import KernelFunctionMetadata
 
 
 class KernelPlugin(SKBaseModel, ABC):
@@ -43,3 +44,13 @@ class KernelPlugin(SKBaseModel, ABC):
     def get_function(self, function_name: str):
         """Gets the function in the plugin with the specified name."""
         pass
+
+    def get_functions_metadata(self) -> List[KernelFunctionMetadata]:
+        """Gets the metadata for all functions in the plugin."""
+        metadata = []
+        for function in self:
+            function_metadata = KernelFunctionMetadata(function.metadata)
+            function_metadata.plugin_name = self.name
+            metadata.append(function_metadata)
+
+        return metadata

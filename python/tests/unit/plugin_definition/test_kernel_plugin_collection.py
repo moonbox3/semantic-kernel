@@ -81,6 +81,7 @@ def test_get_plugin_succeeds():
     assert found_plugin == plugin
     assert collection.get_plugin("NonExistentPlugin") is None
 
+
 def test_configure_plugins_on_object_creation():
     plugin = DefaultKernelPlugin(name="TestPlugin")
     collection = KernelPluginCollection(plugins=[plugin])

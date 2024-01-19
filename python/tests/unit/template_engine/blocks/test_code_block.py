@@ -30,7 +30,7 @@ class TestCodeBlock:
         )
         # Make it so our self.plugins mock's `has_function` method returns False
         # TODO update with KernelFunctionMetadata which will have this
-        #self.plugins.has_function.return_value = False
+        # self.plugins.has_function.return_value = False
         target = CodeBlock(
             content="functionName",
         )

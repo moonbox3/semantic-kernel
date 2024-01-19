@@ -1,20 +1,16 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-import logging
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, Union
+from typing import Any, ClassVar, Dict, List, Optional, Union
 
 from pydantic import Field, root_validator
 
 from semantic_kernel.plugin_definition import constants
 from semantic_kernel.plugin_definition.kernel_plugin import KernelPlugin
 from semantic_kernel.plugin_definition.default_kernel_plugin import DefaultKernelPlugin
-
+from semantic_kernel.plugin_definition.functions_view import FunctionsView
 from semantic_kernel.sk_pydantic import SKBaseModel
 
-#if TYPE_CHECKING:
 from semantic_kernel.orchestration.sk_function_base import SKFunctionBase
-
-logger: logging.Logger = logging.getLogger(__name__)
 
 
 class KernelPluginCollection(SKBaseModel):
@@ -132,3 +128,18 @@ class KernelPluginCollection(SKBaseModel):
         if name not in self.plugins:
             raise KeyError(f"Plugin {name} not found.")
         return self.plugins[name]
+    
+    def get_functions_view(self, include_semantic: bool = True, include_native: bool = True) -> FunctionsView:
+        result = FunctionsView()
+
+        # Iterate over each plugin in self.plugins
+        for plugin_name, plugin in self.plugins.items():
+            # Iterate over each function in the plugin's functions dictionary
+            for f_name, function in plugin.functions.items():
+                if include_semantic and function.is_semantic:
+                    result.add_function(function.describe())
+                elif include_native and function.is_native:
+                    result.add_function(function.describe())
+
+        return result
+

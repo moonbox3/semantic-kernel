@@ -23,7 +23,7 @@ class SKContext(SKBaseModel, Generic[SemanticTextMemoryT]):
     memory: SemanticTextMemoryT
     variables: ContextVariables
     # This field can be used to hold anything that is not a string
-    plugins: KernelPluginCollection = Field(default_factory=KernelPluginCollection)
+    plugin_collection: KernelPluginCollection = Field(default_factory=KernelPluginCollection)
     _objects: Dict[str, Any] = PrivateAttr(default_factory=dict)
     _error_occurred: bool = PrivateAttr(False)
     _last_exception: Optional[Exception] = PrivateAttr(None)
@@ -33,7 +33,7 @@ class SKContext(SKBaseModel, Generic[SemanticTextMemoryT]):
         self,
         variables: ContextVariables,
         memory: SemanticTextMemoryBase,
-        plugins: Union[KernelPluginCollection, None],
+        plugin_collection: Union[KernelPluginCollection, None],
         **kwargs,
         # TODO: cancellation token?
     ) -> None:
@@ -48,10 +48,10 @@ class SKContext(SKBaseModel, Generic[SemanticTextMemoryT]):
         if kwargs.get("logger"):
             logger.warning("The `logger` parameter is deprecated. Please use the `logging` module instead.")
 
-        if plugins is None:
-            plugins = KernelPluginCollection()
+        if plugin_collection is None:
+            plugin_collection = KernelPluginCollection()
 
-        super().__init__(variables=variables, memory=memory, plugins=plugins)
+        super().__init__(variables=variables, memory=memory, plugin_collection=plugin_collection)
 
     def fail(self, error_description: str, exception: Optional[Exception] = None):
         """
@@ -128,14 +128,14 @@ class SKContext(SKBaseModel, Generic[SemanticTextMemoryT]):
         Returns:
             KernelPluginCollection -- The plugins collection.
         """
-        return self.plugins
+        return self.plugin_collection
 
     @plugins.setter
     def plugins(self, value: KernelPluginCollection) -> None:
         """
         Set the value of plugins collection
         """
-        self.plugins = value
+        self.plugin_collection = value
 
     def __setitem__(self, key: str, value: Any) -> None:
         """
@@ -172,14 +172,14 @@ class SKContext(SKBaseModel, Generic[SemanticTextMemoryT]):
         Returns:
             SKFunctionBase -- The function.
         """
-        if self.plugins is None:
+        if self.plugin_collection is None:
             raise ValueError("The plugin collection hasn't been set")
-        assert self.plugins is not None  # for type checker
+        assert self.plugin_collection is not None  # for type checker
 
-        if self.plugins.has_native_function(plugin_name, function_name):
-            return self.plugins.get_native_function(plugin_name, function_name)
+        if self.plugin_collection[plugin_name][function_name].is_native:
+            return self.plugin_collection.get_native_function(plugin_name, function_name)
 
-        return self.plugins.get_semantic_function(plugin_name, function_name)
+        return self.plugin_collection[plugin_name][function_name]
 
     def __str__(self) -> str:
         if self._error_occurred:

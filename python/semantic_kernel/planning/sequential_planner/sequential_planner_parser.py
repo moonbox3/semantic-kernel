@@ -26,7 +26,9 @@ class SequentialPlanParser:
     ) -> Callable[[str, str], Optional[SKFunctionBase]]:
         def function(plugin_name: str, function_name: str) -> Optional[SKFunctionBase]:
             try:
-                return context.plugins.get_function(plugin_name, function_name)
+                return context.plugins[plugin_name].get_function(function_name)
+            except KeyError:
+                return None
             except KernelException:
                 return None
 

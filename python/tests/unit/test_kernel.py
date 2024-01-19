@@ -7,6 +7,7 @@ import pytest
 from semantic_kernel import Kernel
 from semantic_kernel.orchestration.sk_function_base import SKFunctionBase
 from semantic_kernel.plugin_definition.function_view import FunctionView
+from semantic_kernel.plugin_definition.default_kernel_plugin import DefaultKernelPlugin
 
 
 def create_mock_function(name) -> SKFunctionBase:
@@ -28,7 +29,7 @@ async def test_run_async_handles_pre_invocation(pipeline_count):
 
     mock_function = create_mock_function("test_function")
     mock_function.invoke_async = AsyncMock(side_effect=lambda input, context: context)
-    kernel.plugins.add_semantic_function(mock_function)
+    kernel.plugins.add(DefaultKernelPlugin(name="test", functions=[mock_function]))
 
     invoked = 0
 

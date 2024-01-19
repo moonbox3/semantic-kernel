@@ -14,6 +14,7 @@ from semantic_kernel.orchestration.sk_function import SKFunction
 from semantic_kernel.plugin_definition.kernel_plugin_collection import KernelPluginCollection
 from semantic_kernel.plugin_definition.default_kernel_plugin import DefaultKernelPlugin
 
+
 @pytest.fixture(autouse=True)
 def enable_debug_mode():
     """Set `autouse=True` to enable easy debugging for tests.

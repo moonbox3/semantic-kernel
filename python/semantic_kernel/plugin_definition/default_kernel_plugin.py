@@ -94,6 +94,22 @@ class DefaultKernelPlugin(KernelPlugin):
                 f"Plugin name: {self.name}, function name: {function_name}"
             )
         
+    def __getitem__(self, name):
+        """Define the [] operator for the plugin
+
+        Args:
+            name (str): The name of the function to retrieve.
+
+        Returns:
+            The function if it exists, None otherwise.
+
+        Raises:
+            KeyError: If the function does not exist.
+        """
+        if name not in self.functions:
+            raise KeyError(f"Function {name} not found.")
+        return self.functions[name]
+
     def from_function(function: SKFunctionBase) -> "DefaultKernelPlugin":
         """
         Creates a DefaultKernelPlugin from a SKFunctionBase instance.

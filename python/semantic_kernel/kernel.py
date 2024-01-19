@@ -7,6 +7,8 @@ import logging
 import os
 from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union
 from uuid import uuid4
+import random
+import string
 
 from semantic_kernel.connectors.ai.ai_exception import AIException
 from semantic_kernel.connectors.ai.ai_request_settings import AIRequestSettings
@@ -105,7 +107,7 @@ class Kernel:
     @property
     def plugins(self) -> KernelPluginCollection:
         return self._plugins
-    
+
     @plugins.setter
     def plugins(self, value: KernelPluginCollection) -> None:
         self._plugins = value
@@ -124,7 +126,7 @@ class Kernel:
         validate_function_name(function_name)
 
         function = self._create_semantic_function(plugin_name, function_name, function_config)
-        self._plugins.add(function)
+        self._plugins.add(DefaultKernelPlugin(name=plugin_name, functions=[function]))
 
         return function
 
@@ -147,16 +149,14 @@ class Kernel:
         validate_plugin_name(plugin_name)
         validate_function_name(function_name)
 
-        function = SKFunction.from_native_method(sk_function, plugin_name)
-
-        if self._plugins.has_function(plugin_name, function_name):
+        if self._plugins[plugin_name].has_function(function_name):
             raise KernelException(
                 KernelException.ErrorCodes.FunctionOverloadNotSupported,
                 "Overloaded functions are not supported, " "please differentiate function names.",
             )
 
-        # function.set_default_plugin_collection(self._plugins)
-        # self._plugins.add_native_function(function)
+        function = SKFunction.from_native_method(sk_function, plugin_name)
+
         self._plugins.add(function)
 
         return function
@@ -653,14 +653,6 @@ class Kernel:
             function_config.prompt_template_config.execution_settings
         )
 
-        # Connect the function to the current kernel plugin
-        # collection, in case the function is invoked manually
-        # without a context and without a way to find other functions.
-
-        # TODO: this shouldn't need to be done manually now that the plugin collection is a property of the function
-        # VERIFY IF THIS IS TRUE OR NOT
-        #function.set_default_plugin_collection(self._plugins)
-
         if function_config.has_chat_prompt:
             service = self.get_ai_service(
                 ChatCompletionClientBase,
@@ -778,13 +770,17 @@ class Kernel:
             # Prepare lambda wrapping AI logic
             function_config = SemanticFunctionConfig(config, template)
 
-            functions += [self.register_semantic_function(
-                plugin_directory_name, function_name, function_config
-            )]
+            functions += [self.register_semantic_function(plugin_directory_name, function_name, function_config)]
 
         plugin = DefaultKernelPlugin(name=plugin_directory_name, functions=functions)
 
         return plugin
+
+
+    def generate_random_function_name(self, length=16):
+        # Function names can contain upper/lowercase letters, and underscores
+        letters = string.ascii_letters
+        return ''.join(random.choices(letters, k=length))
 
     def create_semantic_function(
         self,
@@ -794,7 +790,7 @@ class Kernel:
         description: Optional[str] = None,
         **kwargs: Any,
     ) -> "SKFunctionBase":
-        function_name = function_name if function_name is not None else f"f_{str(uuid4()).replace('-', '_')}"
+        function_name = function_name if function_name is not None else f'f_{self.generate_random_function_name()}'
 
         config = PromptTemplateConfig(
             description=(description if description is not None else "Generic function, unknown purpose"),
