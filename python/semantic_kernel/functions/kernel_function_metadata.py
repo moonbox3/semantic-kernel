@@ -1,11 +1,13 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-from typing import Any, ClassVar, Dict, List, Optional, Union
 import re
-from pydantic import Field, field_validator, root_validator
-from semantic_kernel.sk_pydantic import SKBaseModel
+from typing import List, Optional
+
+from pydantic import Field, field_validator
+
 from semantic_kernel.functions.kernel_parameter_metadata import KernelParameterMetadata
 from semantic_kernel.functions.kernel_return_parameter_metadata import KernelReturnParameterMetadata
+from semantic_kernel.sk_pydantic import SKBaseModel
 
 
 class KernelFunctionMetadata(SKBaseModel):
@@ -18,6 +20,7 @@ class KernelFunctionMetadata(SKBaseModel):
         parameters (List[KernelParameterMetadata]): The list of parameters for the function.
         return_parameter (KernelReturnParameterMetadata): The return parameter for the function.
     """
+
     name: str = Field(default="")
     description: Optional[str] = Field(default="")
     parameters: Optional[List[KernelParameterMetadata]] = Field(default_factory=list)

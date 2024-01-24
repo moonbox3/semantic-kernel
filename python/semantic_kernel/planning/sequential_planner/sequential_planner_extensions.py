@@ -77,7 +77,6 @@ class SequentialPlannerSKContextExtension:
                 "Plugin collection not found in the context",
             )
 
-        print(type(context.plugins))
         functions_view = context.plugins.get_functions_view()
 
         available_functions: List[FunctionView] = [

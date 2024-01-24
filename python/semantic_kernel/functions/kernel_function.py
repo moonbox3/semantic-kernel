@@ -1,15 +1,15 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-from typing import Dict, Any, List
-from semantic_kernel.sk_pydantic import SKBaseModel
-from abc import ABC, abstractmethod
-import re
-from pydantic import Field, field_validator
+from abc import ABC
+from typing import List
 
-from semantic_kernel.functions.kernel_return_parameter_metadata import KernelReturnParameterMetadata
-from semantic_kernel.functions.kernel_parameter_metadata import KernelParameterMetadata
-from semantic_kernel.functions.kernel_function_metadata import KernelFunctionMetadata
+from pydantic import Field
+
 from semantic_kernel.connectors.ai.ai_request_settings import AIRequestSettings
+from semantic_kernel.functions.kernel_function_metadata import KernelFunctionMetadata
+from semantic_kernel.functions.kernel_parameter_metadata import KernelParameterMetadata
+from semantic_kernel.functions.kernel_return_parameter_metadata import KernelReturnParameterMetadata
+from semantic_kernel.sk_pydantic import SKBaseModel
 
 
 class KernelFunction(SKBaseModel, ABC):
@@ -22,10 +22,13 @@ class KernelFunction(SKBaseModel, ABC):
         metadata (KernelFunctionMetadata): The metadata of the function.
         execution_settings (AIRequestSettings): The execution settings for the function.
     """
+
     name: str = Field(default="")
     description: str = Field(default="")
     metadata: KernelFunctionMetadata
-    execution_settings: AIRequestSettings = Field(default_factory=AIRequestSettings) # TODO: support multiple execution settings
+    execution_settings: AIRequestSettings = Field(
+        default_factory=AIRequestSettings
+    )  # TODO: support multiple execution settings
 
     def __init__(
         self,

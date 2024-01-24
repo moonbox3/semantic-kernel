@@ -5,10 +5,9 @@ import importlib
 import inspect
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union
-from uuid import uuid4
 import random
 import string
+from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union
 
 from semantic_kernel.connectors.ai.ai_exception import AIException
 from semantic_kernel.connectors.ai.ai_request_settings import AIRequestSettings
@@ -31,11 +30,11 @@ from semantic_kernel.orchestration.context_variables import ContextVariables
 from semantic_kernel.orchestration.sk_context import SKContext
 from semantic_kernel.orchestration.sk_function import SKFunction
 from semantic_kernel.orchestration.sk_function_base import SKFunctionBase
-from semantic_kernel.plugin_definition.function_view import FunctionView
-from semantic_kernel.plugin_definition.kernel_plugin import KernelPlugin
 from semantic_kernel.plugin_definition.default_kernel_plugin import (
     DefaultKernelPlugin,
 )
+from semantic_kernel.plugin_definition.function_view import FunctionView
+from semantic_kernel.plugin_definition.kernel_plugin import KernelPlugin
 from semantic_kernel.plugin_definition.kernel_plugin_collection import (
     KernelPluginCollection,
 )
@@ -119,7 +118,7 @@ class Kernel:
         function_config: SemanticFunctionConfig,
     ) -> SKFunctionBase:
         if plugin_name is None or plugin_name == "":
-            plugin_name = KernelPluginCollection.GLOBAL_PLUGIN
+            plugin_name = f"p_{KernelPluginCollection.GLOBAL_PLUGIN}_{self.generate_random_ascii_name()}"
         assert plugin_name is not None  # for type checker
 
         validate_plugin_name(plugin_name)
@@ -203,9 +202,9 @@ class Kernel:
                 else:
                     variables = ContextVariables()
                 context = SKContext(
-                    variables,
-                    self._memory,
-                    self._plugins,
+                    variables=variables,
+                    memory=self._memory,
+                    plugin_collection=self._plugins,
                 )
         else:
             raise ValueError("No functions passed to run")
@@ -258,9 +257,9 @@ class Kernel:
             else:
                 variables = ContextVariables()
             context = SKContext(
-                variables,
-                self._memory,
-                self._plugins,
+                variables=variables,
+                memory=self._memory,
+                plugin_collection=self._plugins,
             )
 
         pipeline_step = 0
@@ -376,9 +375,9 @@ class Kernel:
 
     def create_new_context(self, variables: Optional[ContextVariables] = None) -> SKContext:
         return SKContext(
-            ContextVariables() if not variables else variables,
-            self._memory,
-            self._plugins,
+            variables=ContextVariables() if not variables else variables,
+            memory=self._memory,
+            plugin_collection=self._plugins,
         )
 
     def on_function_invoking(self, function_view: FunctionView, context: SKContext) -> FunctionInvokingEventArgs:
@@ -439,7 +438,12 @@ class Kernel:
             )
 
         plugin = DefaultKernelPlugin(name=plugin_name, functions=functions)
-        self._plugins.add(plugin)
+        # Note: we shouldn't have to be adding functions to a plugin after the fact
+        # This isn't done in dotnet, and needs to be revisited as we move to v1.0
+        if self._plugins.contains(plugin_name):
+            self._plugins.add_functions_to_plugin(functions=functions, plugin_name=plugin_name)
+        else:
+            self._plugins.add(plugin)
 
         return plugin
 
@@ -776,11 +780,10 @@ class Kernel:
 
         return plugin
 
-
-    def generate_random_function_name(self, length=16):
-        # Function names can contain upper/lowercase letters, and underscores
+    def generate_random_ascii_name(self, length=16):
+        # Plugin/Function names can contain upper/lowercase letters, and underscores
         letters = string.ascii_letters
-        return ''.join(random.choices(letters, k=length))
+        return "".join(random.choices(letters, k=length))
 
     def create_semantic_function(
         self,
@@ -790,7 +793,7 @@ class Kernel:
         description: Optional[str] = None,
         **kwargs: Any,
     ) -> "SKFunctionBase":
-        function_name = function_name if function_name is not None else f'f_{self.generate_random_function_name()}'
+        function_name = function_name if function_name is not None else f"f_{self.generate_random_ascii_name()}"
 
         config = PromptTemplateConfig(
             description=(description if description is not None else "Generic function, unknown purpose"),

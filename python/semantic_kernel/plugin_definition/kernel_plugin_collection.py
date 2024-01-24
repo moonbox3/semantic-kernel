@@ -2,22 +2,21 @@
 
 from typing import Any, ClassVar, Dict, List, Optional, Union
 
-from pydantic import Field, root_validator
-
-from semantic_kernel.plugin_definition import constants
-from semantic_kernel.plugin_definition.kernel_plugin import KernelPlugin
-from semantic_kernel.plugin_definition.default_kernel_plugin import DefaultKernelPlugin
-from semantic_kernel.plugin_definition.functions_view import FunctionsView
-from semantic_kernel.sk_pydantic import SKBaseModel
+from pydantic import Field, model_validator
 
 from semantic_kernel.orchestration.sk_function_base import SKFunctionBase
+from semantic_kernel.plugin_definition import constants
+from semantic_kernel.plugin_definition.default_kernel_plugin import DefaultKernelPlugin
+from semantic_kernel.plugin_definition.functions_view import FunctionsView
+from semantic_kernel.plugin_definition.kernel_plugin import KernelPlugin
+from semantic_kernel.sk_pydantic import SKBaseModel
 
 
 class KernelPluginCollection(SKBaseModel):
     GLOBAL_PLUGIN: ClassVar[str] = constants.GLOBAL_PLUGIN
     plugins: Optional[Dict[str, KernelPlugin]] = Field(default_factory=dict)
 
-    @root_validator(pre=True)
+    @model_validator(pre=True)
     def process_plugins(cls, values):
         plugins_input = values.get("plugins")
         if isinstance(plugins_input, KernelPluginCollection):
@@ -52,6 +51,30 @@ class KernelPluginCollection(SKBaseModel):
         if plugin.name in self.plugins:
             raise ValueError(f"Plugin with name {plugin.name} already exists")
         self.plugins[plugin.name] = plugin
+
+    def add_functions_to_plugin(self, functions: List[SKFunctionBase], plugin_name: str) -> None:
+        """
+        Add a function to a plugin in the collection
+
+        Args:
+            functions (List[SKFunctionBase]): The function to add to the plugin.
+            plugin_name (str): The name of the plugin to add the function to.
+
+        Raises:
+            ValueError: If the function or plugin_name is None or invalid.
+        """
+        if not functions or not plugin_name:
+            raise ValueError("Functions and plugin_name must not be None or empty")
+        if plugin_name not in self.plugins:
+            raise ValueError(f"Plugin with name {plugin_name} does not exist")
+
+        plugin = self.plugins[plugin_name]
+        for func in functions:
+            if func.name not in plugin.functions:
+                plugin.functions[func.name] = func
+            else:
+                # Decide here if you want to raise an exception or log and continue
+                raise ValueError(f"Function with name {func.name} already exists in plugin {plugin_name}")
 
     def add_range(self, plugins: List[KernelPlugin]) -> None:
         """
@@ -107,11 +130,11 @@ class KernelPluginCollection(SKBaseModel):
         """Define the length of the collection"""
         return len(self.plugins)
 
-    def contains(self, plugin) -> bool:
+    def contains(self, plugin_name: str) -> bool:
         """Check if the collection contains a plugin"""
-        if plugin is None or plugin.name is None:
+        if not plugin_name:
             return False
-        return self.plugins.get(plugin.name) == plugin
+        return self.plugins.get(plugin_name) is not None
 
     def __getitem__(self, name):
         """Define the [] operator for the collection
@@ -128,18 +151,15 @@ class KernelPluginCollection(SKBaseModel):
         if name not in self.plugins:
             raise KeyError(f"Plugin {name} not found.")
         return self.plugins[name]
-    
+
     def get_functions_view(self, include_semantic: bool = True, include_native: bool = True) -> FunctionsView:
         result = FunctionsView()
 
-        # Iterate over each plugin in self.plugins
-        for plugin_name, plugin in self.plugins.items():
-            # Iterate over each function in the plugin's functions dictionary
-            for f_name, function in plugin.functions.items():
+        for _, plugin in self.plugins.items():
+            for _, function in plugin.functions.items():
                 if include_semantic and function.is_semantic:
                     result.add_function(function.describe())
                 elif include_native and function.is_native:
                     result.add_function(function.describe())
 
         return result
-

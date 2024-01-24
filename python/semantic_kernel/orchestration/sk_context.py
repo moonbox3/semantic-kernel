@@ -1,11 +1,10 @@
 # Copyright (c) Microsoft. All rights reserved.
 
 import logging
-from typing import Any, Dict, Generic, Literal, Optional, Tuple, Union
+from typing import Any, Dict, Generic, Optional, Union
 
 from pydantic import Field, PrivateAttr
 
-from semantic_kernel.kernel_exception import KernelException
 from semantic_kernel.memory.semantic_text_memory_base import (
     SemanticTextMemoryBase,
     SemanticTextMemoryT,

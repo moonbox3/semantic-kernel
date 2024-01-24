@@ -33,7 +33,7 @@ def plugins():
 
 @fixture
 def context(variables, plugins):
-    return SKContext(variables, NullMemory(), plugins)
+    return SKContext(variables=variables, memory=NullMemory(), plugin_collection=plugins)
 
 
 def test_it_renders_variables(target: PromptTemplateEngine, variables: ContextVariables):

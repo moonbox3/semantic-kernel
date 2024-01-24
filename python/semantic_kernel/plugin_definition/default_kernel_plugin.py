@@ -1,11 +1,11 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-from typing import Dict, Any
+from typing import Dict
 
-from pydantic import Field, root_validator
+from pydantic import Field, model_validator
 
-from semantic_kernel.plugin_definition.kernel_plugin import KernelPlugin
 from semantic_kernel.orchestration.sk_function_base import SKFunctionBase
+from semantic_kernel.plugin_definition.kernel_plugin import KernelPlugin
 
 
 class DefaultKernelPlugin(KernelPlugin):
@@ -24,7 +24,7 @@ class DefaultKernelPlugin(KernelPlugin):
     # Todo: this needs to be converted to a KernelFunction type
     functions: Dict[str, SKFunctionBase] = Field(default_factory=dict)
 
-    @root_validator(pre=True)
+    @model_validator(pre=True)
     def list_to_dict(cls, values):
         """
         A root validator to construct the functions dictionary from the functions list.
@@ -93,7 +93,7 @@ class DefaultKernelPlugin(KernelPlugin):
                 f"The plugin does not contain a function with the specified name. "
                 f"Plugin name: {self.name}, function name: {function_name}"
             )
-        
+
     def __getitem__(self, name):
         """Define the [] operator for the plugin
 

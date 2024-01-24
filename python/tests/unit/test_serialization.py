@@ -25,6 +25,9 @@ from semantic_kernel.orchestration.sk_context import SKContext
 from semantic_kernel.orchestration.sk_function import SKFunction
 from semantic_kernel.plugin_definition.function_view import FunctionView
 from semantic_kernel.plugin_definition.functions_view import FunctionsView
+from semantic_kernel.plugin_definition.kernel_plugin_collection import (
+    KernelPluginCollection,
+)
 from semantic_kernel.plugin_definition.parameter_view import ParameterView
 from semantic_kernel.plugin_definition.sk_function_decorator import sk_function
 from semantic_kernel.sk_pydantic import SKBaseModel
@@ -43,9 +46,6 @@ from semantic_kernel.template_engine.protocols.prompt_templating_engine import (
 )
 from semantic_kernel.template_engine.protocols.text_renderer import TextRenderer
 from semantic_kernel.template_engine.template_tokenizer import TemplateTokenizer
-from semantic_kernel.plugin_definition.kernel_plugin_collection import (
-    KernelPluginCollection,
-)
 
 SKBaseModelFieldT = t.TypeVar("SKBaseModelFieldT", bound=SKBaseModel)
 
@@ -147,7 +147,7 @@ def sk_factory() -> t.Callable[[t.Type[_Serializable]], _Serializable]:
             # TODO: Test serialization with different types of memories.
             variables=create_context_variables(),
             memory=NullMemory(),
-            plugins=create_plugin_collection(),
+            plugin_collection=create_plugin_collection(),
         ),
         NullMemory: NullMemory(),
         SKFunction: create_sk_function(),

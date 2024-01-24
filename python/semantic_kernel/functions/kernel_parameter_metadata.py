@@ -3,9 +3,10 @@
 from typing import Any, Optional, Type
 
 from pydantic import Field
-from semantic_kernel.sk_pydantic import SKBaseModel
 
 from semantic_kernel.functions.kernel_json_schema import KernelJsonSchema
+from semantic_kernel.sk_pydantic import SKBaseModel
+
 
 class KernelParameterMetadata(SKBaseModel):
     """
@@ -19,6 +20,7 @@ class KernelParameterMetadata(SKBaseModel):
         schema (KernelJsonSchema): The schema of the parameter.
         is_required (bool): Indicates whether the parameter is required.
     """
+
     name: str = Field(default="")
     description: Optional[str] = Field(default="")
     default_value: Optional[Any] = Field(default=None)

@@ -38,9 +38,11 @@ class FunctionView(SKBaseModel):
         if not isinstance(other, FunctionView):
             return False
 
-        return (self.name == other.name and 
-                self.plugin_name == other.plugin_name and
-                self.description == other.description and
-                self.parameters == other.parameters and
-                self.is_semantic == other.is_semantic and
-                self.is_asynchronous == other.is_asynchronous)
+        return (
+            self.name == other.name
+            and self.plugin_name == other.plugin_name
+            and self.description == other.description
+            and self.parameters == other.parameters
+            and self.is_semantic == other.is_semantic
+            and self.is_asynchronous == other.is_asynchronous
+        )

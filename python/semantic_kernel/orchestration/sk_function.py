@@ -24,13 +24,13 @@ from semantic_kernel.orchestration.delegate_inference import DelegateInference
 from semantic_kernel.orchestration.delegate_types import DelegateTypes
 from semantic_kernel.orchestration.sk_function_base import SKFunctionBase
 from semantic_kernel.plugin_definition.function_view import FunctionView
+from semantic_kernel.plugin_definition.kernel_plugin_collection import (
+    KernelPluginCollection,
+)
 from semantic_kernel.plugin_definition.parameter_view import ParameterView
 from semantic_kernel.semantic_functions.chat_prompt_template import ChatPromptTemplate
 from semantic_kernel.semantic_functions.semantic_function_config import (
     SemanticFunctionConfig,
-)
-from semantic_kernel.plugin_definition.kernel_plugin_collection import (
-    KernelPluginCollection,
 )
 
 if TYPE_CHECKING:
@@ -349,8 +349,8 @@ class SKFunction(SKFunctionBase):
         if context is None:
             context = SKContext(
                 variables=ContextVariables("") if variables is None else variables,
-                plugins=self._plugin_collection,
                 memory=memory if memory is not None else NullMemory.instance,
+                plugin_collection=self._plugin_collection,
             )
         else:
             # If context is passed, we need to merge the variables
@@ -396,8 +396,8 @@ class SKFunction(SKFunctionBase):
         if context is None:
             context = SKContext(
                 variables=ContextVariables("") if variables is None else variables,
-                plugins=self._plugin_collection,
                 memory=memory if memory is not None else NullMemory.instance,
+                plugin_collection=self._plugin_collection,
             )
         else:
             # If context is passed, we need to merge the variables
@@ -471,8 +471,8 @@ class SKFunction(SKFunctionBase):
         if context is None:
             context = SKContext(
                 variables=ContextVariables("") if variables is None else variables,
-                plugins=self._plugin_collection,
                 memory=memory if memory is not None else NullMemory.instance,
+                plugin_collection=self._plugin_collection,
             )
         else:
             # If context is passed, we need to merge the variables

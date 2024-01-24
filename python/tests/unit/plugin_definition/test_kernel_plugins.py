@@ -1,15 +1,15 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-import pytest
 from typing import TYPE_CHECKING
 
+import pytest
 from pydantic_core._pydantic_core import ValidationError
 
-from semantic_kernel.semantic_functions.prompt_template_config import PromptTemplateConfig
-from semantic_kernel.semantic_functions.chat_prompt_template import ChatPromptTemplate
-from semantic_kernel.semantic_functions.semantic_function_config import SemanticFunctionConfig
 from semantic_kernel.orchestration.sk_function import SKFunction
 from semantic_kernel.plugin_definition.default_kernel_plugin import DefaultKernelPlugin
+from semantic_kernel.semantic_functions.chat_prompt_template import ChatPromptTemplate
+from semantic_kernel.semantic_functions.prompt_template_config import PromptTemplateConfig
+from semantic_kernel.semantic_functions.semantic_function_config import SemanticFunctionConfig
 from semantic_kernel.template_engine.prompt_template_engine import PromptTemplateEngine
 
 if TYPE_CHECKING:

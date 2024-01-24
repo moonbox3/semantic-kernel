@@ -6,8 +6,8 @@ import pytest
 
 from semantic_kernel import Kernel
 from semantic_kernel.orchestration.sk_function_base import SKFunctionBase
-from semantic_kernel.plugin_definition.function_view import FunctionView
 from semantic_kernel.plugin_definition.default_kernel_plugin import DefaultKernelPlugin
+from semantic_kernel.plugin_definition.function_view import FunctionView
 
 
 def create_mock_function(name) -> SKFunctionBase:

@@ -7,6 +7,7 @@ from semantic_kernel.orchestration.context_variables import ContextVariables
 from semantic_kernel.orchestration.delegate_types import DelegateTypes
 from semantic_kernel.orchestration.sk_context import SKContext
 from semantic_kernel.orchestration.sk_function import SKFunction
+from semantic_kernel.plugin_definition.default_kernel_plugin import DefaultKernelPlugin
 from semantic_kernel.plugin_definition.kernel_plugin_collection import (
     KernelPluginCollection,
 )
@@ -26,11 +27,9 @@ class TestCodeBlock:
         context = SKContext.model_construct(
             variables=ContextVariables(),
             memory=NullMemory(),
-            plugin_collection=self.plugins,
+            plugin_collection=KernelPluginCollection(),
         )
-        # Make it so our self.plugins mock's `has_function` method returns False
-        # TODO update with KernelFunctionMetadata which will have this
-        # self.plugins.has_function.return_value = False
+
         target = CodeBlock(
             content="functionName",
         )
@@ -40,12 +39,6 @@ class TestCodeBlock:
 
     @mark.asyncio
     async def test_it_throws_if_a_function_call_throws(self):
-        context = SKContext.model_construct(
-            variables=ContextVariables(),
-            memory=NullMemory(),
-            plugin_collection=self.plugins,
-        )
-
         def invoke(_):
             raise Exception("error")
 
@@ -59,8 +52,16 @@ class TestCodeBlock:
             is_semantic=False,
         )
 
-        self.plugins.has_function.return_value = True
-        self.plugins.get_function.return_value = function
+        dkp = DefaultKernelPlugin(name="test", functions=[function])
+        plugins = KernelPluginCollection()
+        plugins.add(dkp)
+
+        # Create a context with the variables, memory, and plugin collection
+        context = SKContext.model_construct(
+            variables=ContextVariables(),
+            memory=NullMemory(),
+            plugin_collection=plugins,
+        )
 
         target = CodeBlock(
             content="functionName",
@@ -217,13 +218,6 @@ class TestCodeBlock:
         variables["var1"] = "uno"
         variables["var2"] = "due"
 
-        # Create a context with the variables, memory, and plugin collection
-        context = SKContext.model_construct(
-            variables=variables,
-            memory=NullMemory(),
-            plugin_collection=self.plugins,
-        )
-
         # Create a FunctionIdBlock with the function name
         func_id = FunctionIdBlock(content="funcName")
 
@@ -253,9 +247,16 @@ class TestCodeBlock:
             is_semantic=False,
         )
 
-        # Mock the plugin collection's function retrieval
-        self.plugins.has_function.return_value = True
-        self.plugins.get_function.return_value = function
+        dkp = DefaultKernelPlugin(name="test", functions=[function])
+        plugins = KernelPluginCollection()
+        plugins.add(dkp)
+
+        # Create a context with the variables, memory, and plugin collection
+        context = SKContext.model_construct(
+            variables=variables,
+            memory=NullMemory(),
+            plugin_collection=plugins,
+        )
 
         # Create a CodeBlock with the FunctionIdBlock and render it with the context
         code_block = CodeBlock(
@@ -284,13 +285,6 @@ class TestCodeBlock:
         variables = ContextVariables()
         variables[VAR_NAME] = VAR_VALUE
 
-        # Create a context with the variables, memory, and plugin collection
-        context = SKContext.model_construct(
-            variables=variables,
-            memory=NullMemory(),
-            plugin_collection=self.plugins,
-        )
-
         # Create a FunctionIdBlock with the function name and a
         # VarBlock with the custom variable
         func_id = FunctionIdBlock(content="funcName")
@@ -315,9 +309,16 @@ class TestCodeBlock:
             is_semantic=False,
         )
 
-        # Mock the plugin collection's function retrieval
-        self.plugins.has_function.return_value = True
-        self.plugins.get_function.return_value = function
+        dkp = DefaultKernelPlugin(name="test", functions=[function])
+        plugins = KernelPluginCollection()
+        plugins.add(dkp)
+
+        # Create a context with the variables, memory, and plugin collection
+        context = SKContext.model_construct(
+            variables=variables,
+            memory=NullMemory(),
+            plugin_collection=plugins,
+        )
 
         # Create a CodeBlock with the FunctionIdBlock and VarBlock,
         # and render it with the context
@@ -336,13 +337,6 @@ class TestCodeBlock:
     async def test_it_invokes_function_with_custom_value(self):
         # Define a value to be used in the test
         VALUE = "value"
-
-        # Create a context with empty variables, memory, and plugin collection
-        context = SKContext.model_construct(
-            variables=ContextVariables(),
-            memory=NullMemory(),
-            plugin_collection=self.plugins,
-        )
 
         # Create a FunctionIdBlock with the function name and a ValBlock with the value
         func_id = FunctionIdBlock(content="funcName")
@@ -367,9 +361,16 @@ class TestCodeBlock:
             is_semantic=False,
         )
 
-        # Mock the plugin collection's function retrieval
-        self.plugins.has_function.return_value = True
-        self.plugins.get_function.return_value = function
+        dkp = DefaultKernelPlugin(name="test", functions=[function])
+        plugins = KernelPluginCollection()
+        plugins.add(dkp)
+
+        # Create a context with empty variables, memory, and plugin collection
+        context = SKContext.model_construct(
+            variables=ContextVariables(),
+            memory=NullMemory(),
+            plugin_collection=plugins,
+        )
 
         # Create a CodeBlock with the FunctionIdBlock and ValBlock,
         # and render it with the context

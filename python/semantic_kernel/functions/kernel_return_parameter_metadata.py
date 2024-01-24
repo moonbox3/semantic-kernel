@@ -1,11 +1,11 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-from typing import Any, ClassVar, Dict, List, Optional, Type, Union
+from typing import Optional, Type
 
-from pydantic import Field, root_validator
-from semantic_kernel.sk_pydantic import SKBaseModel
+from pydantic import Field
 
 from semantic_kernel.functions.kernel_json_schema import KernelJsonSchema
+from semantic_kernel.sk_pydantic import SKBaseModel
 
 
 class KernelReturnParameterMetadata(SKBaseModel):

@@ -145,8 +145,8 @@ class Plan(SKFunctionBase):
         if context is None:
             context = SKContext(
                 variables=self._state,
-                plugins=KernelPluginCollection(),
                 memory=memory or NullMemory(),
+                plugin_collection=KernelPluginCollection(),
             )
 
         if self._function is not None:
@@ -185,8 +185,8 @@ class Plan(SKFunctionBase):
         if context is None:
             context = SKContext(
                 variables=self._state,
-                plugins=KernelPluginCollection(),
                 memory=memory or NullMemory(),
+                plugin_collection=KernelPluginCollection(),
             )
 
         if self._function is not None:
@@ -298,7 +298,7 @@ class Plan(SKFunctionBase):
             func_context = SKContext(
                 variables=variables,
                 memory=context.memory,
-                plugins=context.plugins,
+                plugin_collection=context.plugins,
             )
             result = await step.invoke_async(context=func_context)
             result_value = result.result

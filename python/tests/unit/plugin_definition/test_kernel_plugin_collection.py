@@ -1,21 +1,15 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-import pytest
+from string import ascii_uppercase
 from typing import TYPE_CHECKING
 
-from pydantic_core._pydantic_core import ValidationError
-from string import ascii_uppercase
-from semantic_kernel.semantic_functions.prompt_template_config import PromptTemplateConfig
-from semantic_kernel.semantic_functions.chat_prompt_template import ChatPromptTemplate
-from semantic_kernel.semantic_functions.semantic_function_config import SemanticFunctionConfig
-from semantic_kernel.orchestration.sk_function import SKFunction
-from semantic_kernel.plugin_definition.kernel_plugin import KernelPlugin
-from semantic_kernel.plugin_definition.kernel_plugin_collection import KernelPluginCollection
+import pytest
+
 from semantic_kernel.plugin_definition.default_kernel_plugin import DefaultKernelPlugin
-from semantic_kernel.template_engine.prompt_template_engine import PromptTemplateEngine
+from semantic_kernel.plugin_definition.kernel_plugin_collection import KernelPluginCollection
 
 if TYPE_CHECKING:
-    from semantic_kernel.orchestration.sk_context import SKContext
+    pass
 
 
 def test_add_plugin():
