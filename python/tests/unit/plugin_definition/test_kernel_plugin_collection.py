@@ -17,7 +17,7 @@ def test_add_plugin():
     plugin = DefaultKernelPlugin(name="TestPlugin")
     collection.add(plugin)
     assert len(collection) == 1
-    assert collection.contains(plugin)
+    assert collection.contains(plugin.name)
 
 
 def test_remove_plugin():

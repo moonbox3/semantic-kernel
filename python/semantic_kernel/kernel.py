@@ -21,6 +21,8 @@ from semantic_kernel.connectors.ai.text_completion_client_base import (
     TextCompletionClientBase,
 )
 from semantic_kernel.events import FunctionInvokedEventArgs, FunctionInvokingEventArgs
+from semantic_kernel.functions.kernel_function import KernelFunction
+from semantic_kernel.functions.kernel_function_base import KernelFunctionBase
 from semantic_kernel.kernel_exception import KernelException
 from semantic_kernel.memory.memory_store_base import MemoryStoreBase
 from semantic_kernel.memory.null_memory import NullMemory
@@ -28,10 +30,6 @@ from semantic_kernel.memory.semantic_text_memory import SemanticTextMemory
 from semantic_kernel.memory.semantic_text_memory_base import SemanticTextMemoryBase
 from semantic_kernel.orchestration.context_variables import ContextVariables
 from semantic_kernel.orchestration.kernel_context import KernelContext
-from semantic_kernel.orchestration.kernel_function import KernelFunction
-from semantic_kernel.functions.kernel_function_base import KernelFunctionBase
-from semantic_kernel.plugin_definition.function_view import FunctionView
-from semantic_kernel.plugin_definition.plugin_collection import PluginCollection
 from semantic_kernel.plugin_definition.default_kernel_plugin import (
     DefaultKernelPlugin,
 )
@@ -113,12 +111,40 @@ class Kernel:
     def plugins(self, value: KernelPluginCollection) -> None:
         self._plugins = value
 
+    def add_plugin_to_collection(self, plugin_name: str, functions: List[KernelFunctionBase]) -> None:
+        """
+        Adds a plugin to the kernel's collection of plugins
+
+        Args:
+            plugin_name (str): The name of the plugin
+            functions (List[KernelFunctionBase]): The functions to add to the plugin
+        """
+        if self._plugins.contains(plugin_name):
+            self._plugins.add_functions_to_plugin(functions=functions, plugin_name=plugin_name)
+        else:
+            plugin = DefaultKernelPlugin(name=plugin_name, functions=functions)
+            self._plugins.add(plugin)
+
     def register_semantic_function(
         self,
         plugin_name: Optional[str],
         function_name: str,
         function_config: SemanticFunctionConfig,
     ) -> KernelFunctionBase:
+        """
+        Creates a semantic function from the plugin name, function name and function config
+
+        Args:
+            plugin_name (Optional[str]): The name of the plugin
+            function_name (str): The name of the function
+            function_config (SemanticFunctionConfig): The function config
+
+        Returns:
+            KernelFunctionBase: The created semantic function
+
+        Raises:
+            ValueError: If the plugin name or function name are invalid
+        """
         if plugin_name is None or plugin_name == "":
             # plugin_name = f"p_{KernelPluginCollection.GLOBAL_PLUGIN}_{self.generate_random_ascii_name()}"
             plugin_name = f"p_{self.generate_random_ascii_name()}"
@@ -128,7 +154,7 @@ class Kernel:
         validate_function_name(function_name)
 
         function = self._create_semantic_function(plugin_name, function_name, function_config)
-        self._plugins.add(DefaultKernelPlugin(name=plugin_name, functions=[function]))
+        self.add_plugin_to_collection(plugin_name, [function])
 
         return function
 
@@ -137,6 +163,16 @@ class Kernel:
         plugin_name: Optional[str],
         kernel_function: Callable,
     ) -> KernelFunctionBase:
+        """
+        Creates a native function from the plugin name and kernel function
+
+        Args:
+            plugin_name (Optional[str]): The name of the plugin
+            kernel_function (Callable): The kernel function
+
+        Returns:
+            KernelFunctionBase: The created native function
+        """
         if not hasattr(kernel_function, "__kernel_function__"):
             raise KernelException(
                 KernelException.ErrorCodes.InvalidFunctionType,
@@ -158,8 +194,7 @@ class Kernel:
             )
 
         function = KernelFunction.from_native_method(kernel_function, plugin_name)
-
-        self._plugins.add(DefaultKernelPlugin(name=plugin_name, functions=[function]))
+        self.add_plugin_to_collection(plugin_name, [function])
 
         return function
 
@@ -412,7 +447,7 @@ class Kernel:
             KernelPlugin: The imported plugin of type KernelPlugin.
         """
         if plugin_name.strip() == "":
-            #plugin_name = KernelPluginCollection.GLOBAL_PLUGIN
+            # plugin_name = KernelPluginCollection.GLOBAL_PLUGIN
             plugin_name = plugin_instance.__class__.__name__
             logger.debug(f"Importing plugin {plugin_name} into the global namespace")
         else:

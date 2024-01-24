@@ -9,7 +9,6 @@ from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 
 class KernelReturnParameterMetadata(KernelBaseModel):
-
     # TODO: Placeholder for upcoming work on replacing context, introducing Kernel Args
 
     description: str

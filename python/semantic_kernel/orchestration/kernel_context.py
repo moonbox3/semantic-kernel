@@ -5,13 +5,13 @@ from typing import Any, Dict, Generic, Optional, Union
 
 from pydantic import Field, PrivateAttr
 
+from semantic_kernel.kernel_pydantic import KernelBaseModel
 from semantic_kernel.memory.semantic_text_memory_base import (
     SemanticTextMemoryBase,
     SemanticTextMemoryT,
 )
 from semantic_kernel.orchestration.context_variables import ContextVariables
 from semantic_kernel.plugin_definition.kernel_plugin_collection import KernelPluginCollection
-from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 logger: logging.Logger = logging.getLogger(__name__)
 

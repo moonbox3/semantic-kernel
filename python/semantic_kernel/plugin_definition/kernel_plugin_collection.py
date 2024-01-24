@@ -1,15 +1,15 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-from typing import Any, ClassVar, Dict, List, Optional, Union
+from typing import Any, ClassVar, Dict, List, Optional
 
 from pydantic import Field, model_validator
 
 from semantic_kernel.functions.kernel_function_base import KernelFunctionBase
+from semantic_kernel.kernel_pydantic import KernelBaseModel
 from semantic_kernel.plugin_definition import constants
 from semantic_kernel.plugin_definition.default_kernel_plugin import DefaultKernelPlugin
 from semantic_kernel.plugin_definition.functions_view import FunctionsView
 from semantic_kernel.plugin_definition.kernel_plugin import KernelPlugin
-from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 
 class KernelPluginCollection(KernelBaseModel):
