@@ -7,10 +7,10 @@ from pydantic import Field, field_validator
 
 from semantic_kernel.functions.kernel_parameter_metadata import KernelParameterMetadata
 from semantic_kernel.functions.kernel_return_parameter_metadata import KernelReturnParameterMetadata
-from semantic_kernel.sk_pydantic import SKBaseModel
+from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 
-class KernelFunctionMetadata(SKBaseModel):
+class KernelFunctionMetadata(KernelBaseModel):
     """
     Defines a KernelFunctionMetadata object.
 

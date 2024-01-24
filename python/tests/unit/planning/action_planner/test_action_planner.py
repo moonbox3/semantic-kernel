@@ -6,8 +6,8 @@ import pytest
 from semantic_kernel import Kernel
 from semantic_kernel.memory.semantic_text_memory import SemanticTextMemoryBase
 from semantic_kernel.orchestration.context_variables import ContextVariables
-from semantic_kernel.orchestration.sk_context import SKContext
-from semantic_kernel.orchestration.sk_function_base import SKFunctionBase
+from semantic_kernel.orchestration.kernel_context import KernelContext
+from semantic_kernel.functions.kernel_function_base import KernelFunctionBase
 from semantic_kernel.planning import ActionPlanner
 from semantic_kernel.planning.action_planner.action_planner_config import (
     ActionPlannerConfig,
@@ -21,8 +21,8 @@ from semantic_kernel.plugin_definition.kernel_plugin_collection import (
 )
 
 
-def create_mock_function(function_view: FunctionView) -> Mock(spec=SKFunctionBase):
-    mock_function = Mock(spec=SKFunctionBase)
+def create_mock_function(function_view: FunctionView) -> Mock(spec=KernelFunctionBase):
+    mock_function = Mock(spec=KernelFunctionBase)
     mock_function.describe.return_value = function_view
     mock_function.name = function_view.name
     mock_function.plugin_name = function_view.plugin_name
@@ -55,7 +55,7 @@ async def test_plan_creation_async():
     )
 
     kernel = Mock(spec=Kernel)
-    mock_function = Mock(spec=SKFunctionBase)
+    mock_function = Mock(spec=KernelFunctionBase)
     memory = Mock(spec=SemanticTextMemoryBase)
     plugins = Mock(spec=KernelPluginCollection)
     mock_plugin = Mock(spec=DefaultKernelPlugin)
@@ -72,8 +72,10 @@ async def test_plan_creation_async():
     plugins.get_plugin.return_value = mock_plugin
     plugins.get_plugin.get_function.return_value = mock_function
 
-    context = SKContext.model_construct(variables=ContextVariables(), memory=memory, plugin_collection=plugins)
-    return_context = SKContext.model_construct(variables=ContextVariables(), memory=memory, plugin_collection=plugins)
+    context = KernelContext.model_construct(variables=ContextVariables(), memory=memory, plugin_collection=plugins)
+    return_context = KernelContext.model_construct(
+        variables=ContextVariables(), memory=memory, plugin_collection=plugins
+    )
 
     return_context.variables.update(plan_str)
 
@@ -106,7 +108,7 @@ def plugins_input():
 @pytest.fixture
 def mock_context(plugins_input):
     memory = Mock(spec=Kernel)
-    context = Mock(spec=SKContext)
+    context = Mock(spec=KernelContext)
 
     functionsView = FunctionsView()
     plugins = Mock(spec=KernelPluginCollection)
@@ -116,7 +118,7 @@ def mock_context(plugins_input):
         mock_function = create_mock_function(function_view)
         functionsView.add_function(function_view)
 
-        _context = SKContext.model_construct(variables=ContextVariables(), memory=memory, plugin_collection=plugins)
+        _context = KernelContext.model_construct(variables=ContextVariables(), memory=memory, plugin_collection=plugins)
         _context.variables.update("MOCK FUNCTION CALLED")
         mock_function.invoke_async.return_value = _context
         mock_functions.append(mock_function)
@@ -187,7 +189,7 @@ async def test_invalid_json_throw_async():
     plan_str = '{"":{""function"": ""WriterPlugin.Translate""}}'
 
     kernel = Mock(spec=Kernel)
-    mock_function = Mock(spec=SKFunctionBase)
+    mock_function = Mock(spec=KernelFunctionBase)
     memory = Mock(spec=SemanticTextMemoryBase)
     plugins = Mock(spec=KernelPluginCollection)
 
@@ -201,8 +203,10 @@ async def test_invalid_json_throw_async():
     mock_function = create_mock_function(function_view)
     plugins.get_plugin.get_function.return_value = mock_function
 
-    context = SKContext.model_construct(variables=ContextVariables(), memory=memory, plugin_collection=plugins)
-    return_context = SKContext.model_construct(variables=ContextVariables(), memory=memory, plugin_collection=plugins)
+    context = KernelContext.model_construct(variables=ContextVariables(), memory=memory, plugin_collection=plugins)
+    return_context = KernelContext.model_construct(
+        variables=ContextVariables(), memory=memory, plugin_collection=plugins
+    )
 
     return_context.variables.update(plan_str)
 
@@ -222,7 +226,7 @@ async def test_empty_goal_throw_async():
     goal = ""
 
     kernel = Mock(spec=Kernel)
-    mock_function = Mock(spec=SKFunctionBase)
+    mock_function = Mock(spec=KernelFunctionBase)
     memory = Mock(spec=SemanticTextMemoryBase)
     plugins = Mock(spec=KernelPluginCollection)
 
@@ -236,8 +240,10 @@ async def test_empty_goal_throw_async():
     mock_function = create_mock_function(function_view)
     plugins.get_plugin.get_function.return_value = mock_function
 
-    context = SKContext.model_construct(variables=ContextVariables(), memory=memory, plugin_collection=plugins)
-    return_context = SKContext.model_construct(variables=ContextVariables(), memory=memory, plugin_collection=plugins)
+    context = KernelContext.model_construct(variables=ContextVariables(), memory=memory, plugin_collection=plugins)
+    return_context = KernelContext.model_construct(
+        variables=ContextVariables(), memory=memory, plugin_collection=plugins
+    )
     mock_function.invoke_async.return_value = return_context
 
     kernel.create_semantic_function.return_value = mock_function

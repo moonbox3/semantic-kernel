@@ -5,8 +5,8 @@ from pytest import mark, raises
 from semantic_kernel.memory.null_memory import NullMemory
 from semantic_kernel.orchestration.context_variables import ContextVariables
 from semantic_kernel.orchestration.delegate_types import DelegateTypes
-from semantic_kernel.orchestration.sk_context import SKContext
-from semantic_kernel.orchestration.sk_function import SKFunction
+from semantic_kernel.orchestration.kernel_context import KernelContext
+from semantic_kernel.functions.kernel_function import KernelFunction
 from semantic_kernel.plugin_definition.default_kernel_plugin import DefaultKernelPlugin
 from semantic_kernel.plugin_definition.kernel_plugin_collection import (
     KernelPluginCollection,
@@ -24,7 +24,7 @@ class TestCodeBlock:
 
     @mark.asyncio
     async def test_it_throws_if_a_function_doesnt_exist(self):
-        context = SKContext.model_construct(
+        context = KernelContext.model_construct(
             variables=ContextVariables(),
             memory=NullMemory(),
             plugin_collection=KernelPluginCollection(),
@@ -42,8 +42,8 @@ class TestCodeBlock:
         def invoke(_):
             raise Exception("error")
 
-        function = SKFunction(
-            delegate_type=DelegateTypes.InSKContext,
+        function = KernelFunction(
+            delegate_type=DelegateTypes.InKernelContext,
             delegate_function=invoke,
             plugin_name="",
             function_name="funcName",
@@ -57,7 +57,7 @@ class TestCodeBlock:
         plugins.add(dkp)
 
         # Create a context with the variables, memory, and plugin collection
-        context = SKContext.model_construct(
+        context = KernelContext.model_construct(
             variables=ContextVariables(),
             memory=NullMemory(),
             plugin_collection=plugins,
@@ -147,7 +147,7 @@ class TestCodeBlock:
         variables = ContextVariables()
         variables["varName"] = "foo"
 
-        context = SKContext.model_construct(
+        context = KernelContext.model_construct(
             variables=variables,
             memory=NullMemory(),
             plugin_collection=None,
@@ -165,7 +165,7 @@ class TestCodeBlock:
         variables = ContextVariables()
         variables["varName"] = "bar"
 
-        context = SKContext.model_construct(
+        context = KernelContext.model_construct(
             variables=variables,
             memory=NullMemory(),
             plugin_collection=None,
@@ -181,7 +181,7 @@ class TestCodeBlock:
 
     @mark.asyncio
     async def test_it_renders_code_block_consisting_of_just_a_val_block1(self):
-        context = SKContext.model_construct(
+        context = KernelContext.model_construct(
             variables=ContextVariables(),
             memory=NullMemory(),
             plugin_collection=None,
@@ -196,7 +196,7 @@ class TestCodeBlock:
 
     @mark.asyncio
     async def test_it_renders_code_block_consisting_of_just_a_val_block2(self):
-        context = SKContext.model_construct(
+        context = KernelContext.model_construct(
             variables=ContextVariables(),
             memory=NullMemory(),
             plugin_collection=None,
@@ -236,9 +236,9 @@ class TestCodeBlock:
             ctx["var1"] = "overridden"
             ctx["var2"] = "overridden"
 
-        # Create an SKFunction with the invoke function as its delegate
-        function = SKFunction(
-            delegate_type=DelegateTypes.InSKContext,
+        # Create an KernelFunction with the invoke function as its delegate
+        function = KernelFunction(
+            delegate_type=DelegateTypes.InKernelContext,
             delegate_function=invoke,
             plugin_name="",
             function_name="funcName",
@@ -252,7 +252,7 @@ class TestCodeBlock:
         plugins.add(dkp)
 
         # Create a context with the variables, memory, and plugin collection
-        context = SKContext.model_construct(
+        context = KernelContext.model_construct(
             variables=variables,
             memory=NullMemory(),
             plugin_collection=plugins,
@@ -298,9 +298,9 @@ class TestCodeBlock:
             nonlocal canary
             canary = ctx["input"]
 
-        # Create an SKFunction with the invoke function as its delegate
-        function = SKFunction(
-            delegate_type=DelegateTypes.InSKContext,
+        # Create an KernelFunction with the invoke function as its delegate
+        function = KernelFunction(
+            delegate_type=DelegateTypes.InKernelContext,
             delegate_function=invoke,
             plugin_name="",
             function_name="funcName",
@@ -314,7 +314,7 @@ class TestCodeBlock:
         plugins.add(dkp)
 
         # Create a context with the variables, memory, and plugin collection
-        context = SKContext.model_construct(
+        context = KernelContext.model_construct(
             variables=variables,
             memory=NullMemory(),
             plugin_collection=plugins,
@@ -350,9 +350,9 @@ class TestCodeBlock:
             nonlocal canary
             canary = ctx["input"]
 
-        # Create an SKFunction with the invoke function as its delegate
-        function = SKFunction(
-            delegate_type=DelegateTypes.InSKContext,
+        # Create an KernelFunction with the invoke function as its delegate
+        function = KernelFunction(
+            delegate_type=DelegateTypes.InKernelContext,
             delegate_function=invoke,
             plugin_name="",
             function_name="funcName",
@@ -366,7 +366,7 @@ class TestCodeBlock:
         plugins.add(dkp)
 
         # Create a context with empty variables, memory, and plugin collection
-        context = SKContext.model_construct(
+        context = KernelContext.model_construct(
             variables=ContextVariables(),
             memory=NullMemory(),
             plugin_collection=plugins,

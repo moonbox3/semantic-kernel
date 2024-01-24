@@ -7,10 +7,10 @@ from typing import List
 from pydantic import Field, field_validator
 
 from semantic_kernel.functions.kernel_function_metadata import KernelFunctionMetadata
-from semantic_kernel.sk_pydantic import SKBaseModel
+from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 
-class KernelPlugin(SKBaseModel, ABC):
+class KernelPlugin(KernelBaseModel, ABC):
     """
     The KernelPlugin Base Class. All plugins must inherit from this class.
 

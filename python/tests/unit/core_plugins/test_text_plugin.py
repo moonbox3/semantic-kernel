@@ -10,13 +10,13 @@ def test_can_be_instantiated():
 def test_can_be_imported():
     kernel = sk.Kernel()
     assert kernel.import_plugin(TextPlugin())
-    assert kernel.plugins.has_native_function(PluginCollection.GLOBAL_PLUGIN, "trim")
+    assert kernel.plugins[PluginCollection.GLOBAL_PLUGIN]["trim"].is_native
 
 
 def test_can_be_imported_with_name():
     kernel = sk.Kernel()
     assert kernel.import_plugin(TextPlugin(), "text")
-    assert kernel.plugins.has_native_function("text", "trim")
+    assert kernel.plugins["text"]["trim"].is_native
 
 
 def test_can_trim():

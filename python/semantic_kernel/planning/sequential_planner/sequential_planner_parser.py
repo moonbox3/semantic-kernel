@@ -6,8 +6,8 @@ from xml.etree import ElementTree as ET
 
 from semantic_kernel.kernel_exception import KernelException
 from semantic_kernel.orchestration.context_variables import ContextVariables
-from semantic_kernel.orchestration.sk_context import SKContext
-from semantic_kernel.orchestration.sk_function_base import SKFunctionBase
+from semantic_kernel.orchestration.kernel_context import KernelContext
+from semantic_kernel.functions.kernel_function_base import KernelFunctionBase
 from semantic_kernel.planning.plan import Plan
 from semantic_kernel.planning.planning_exception import PlanningException
 
@@ -22,11 +22,11 @@ APPEND_TO_RESULT_TAG = "appendToResult"
 class SequentialPlanParser:
     @staticmethod
     def get_plugin_function(
-        context: SKContext,
-    ) -> Callable[[str, str], Optional[SKFunctionBase]]:
-        def function(plugin_name: str, function_name: str) -> Optional[SKFunctionBase]:
+        context: KernelContext,
+    ) -> Callable[[str, str], Optional[KernelFunctionBase]]:
+        def function(plugin_name: str, function_name: str) -> Optional[KernelFunctionBase]:
             try:
-                return context.plugins[plugin_name].get_function(function_name)
+                return context.plugins.get_plugin(plugin_name).get_function(function_name)
             except KeyError:
                 return None
             except KernelException:
@@ -38,7 +38,7 @@ class SequentialPlanParser:
     def to_plan_from_xml(
         xml_string: str,
         goal: str,
-        get_plugin_function: Callable[[str, str], Optional[SKFunctionBase]],
+        get_plugin_function: Callable[[str, str], Optional[KernelFunctionBase]],
         allow_missing_functions: bool = False,
     ):
         xml_string = "<xml>" + xml_string + "</xml>"

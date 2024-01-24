@@ -11,12 +11,12 @@ from semantic_kernel.memory.semantic_text_memory_base import (
 )
 from semantic_kernel.orchestration.context_variables import ContextVariables
 from semantic_kernel.plugin_definition.kernel_plugin_collection import KernelPluginCollection
-from semantic_kernel.sk_pydantic import SKBaseModel
+from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-class SKContext(SKBaseModel, Generic[SemanticTextMemoryT]):
+class KernelContext(KernelBaseModel, Generic[SemanticTextMemoryT]):
     """Semantic Kernel context."""
 
     memory: SemanticTextMemoryT
@@ -37,7 +37,7 @@ class SKContext(SKBaseModel, Generic[SemanticTextMemoryT]):
         # TODO: cancellation token?
     ) -> None:
         """
-        Initializes a new instance of the SKContext class.
+        Initializes a new instance of the KernelContext class.
 
         Arguments:
             variables {ContextVariables} -- The context variables.
@@ -169,7 +169,7 @@ class SKContext(SKBaseModel, Generic[SemanticTextMemoryT]):
             function_name {str} -- The function name.
 
         Returns:
-            SKFunctionBase -- The function.
+            KernelFunctionBase -- The function.
         """
         if self.plugin_collection is None:
             raise ValueError("The plugin collection hasn't been set")

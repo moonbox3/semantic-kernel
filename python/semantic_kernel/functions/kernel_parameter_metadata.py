@@ -5,10 +5,10 @@ from typing import Any, Optional, Type
 from pydantic import Field
 
 from semantic_kernel.functions.kernel_json_schema import KernelJsonSchema
-from semantic_kernel.sk_pydantic import SKBaseModel
+from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 
-class KernelParameterMetadata(SKBaseModel):
+class KernelParameterMetadata(KernelBaseModel):
     """
     Defines a KernelParameterMetadata object.
 

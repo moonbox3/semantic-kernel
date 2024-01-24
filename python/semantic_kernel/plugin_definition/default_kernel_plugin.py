@@ -4,7 +4,7 @@ from typing import Dict
 
 from pydantic import Field, model_validator
 
-from semantic_kernel.orchestration.sk_function_base import SKFunctionBase
+from semantic_kernel.functions.kernel_function_base import KernelFunctionBase
 from semantic_kernel.plugin_definition.kernel_plugin import KernelPlugin
 
 
@@ -15,16 +15,16 @@ class DefaultKernelPlugin(KernelPlugin):
     Attributes:
         name (str): The name of the plugin.
         description (str): The description of the plugin.
-        functions (Dict[str, SKFunctionBase]): The functions in the plugin,
+        functions (Dict[str, KernelFunctionBase]): The functions in the plugin,
             indexed by their name. Although this is a dictionary, the user
-            should pass a list of SKFunctionBase instances when initializing,
+            should pass a list of KernelFunctionBase instances when initializing,
             and they will be automatically converted to a dictionary.
     """
 
     # Todo: this needs to be converted to a KernelFunction type
-    functions: Dict[str, SKFunctionBase] = Field(default_factory=dict)
+    functions: Dict[str, KernelFunctionBase] = Field(default_factory=dict)
 
-    @model_validator(pre=True)
+    @model_validator(mode="before")
     def list_to_dict(cls, values):
         """
         A root validator to construct the functions dictionary from the functions list.
@@ -110,12 +110,12 @@ class DefaultKernelPlugin(KernelPlugin):
             raise KeyError(f"Function {name} not found.")
         return self.functions[name]
 
-    def from_function(function: SKFunctionBase) -> "DefaultKernelPlugin":
+    def from_function(function: KernelFunctionBase) -> "DefaultKernelPlugin":
         """
-        Creates a DefaultKernelPlugin from a SKFunctionBase instance.
+        Creates a DefaultKernelPlugin from a KernelFunctionBase instance.
 
         Args:
-            function (SKFunctionBase): The function to create the plugin from.
+            function (KernelFunctionBase): The function to create the plugin from.
 
         Returns:
             A DefaultKernelPlugin instance.

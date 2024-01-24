@@ -9,8 +9,8 @@ import pytest
 import semantic_kernel as sk
 from semantic_kernel.memory.null_memory import NullMemory
 from semantic_kernel.orchestration.context_variables import ContextVariables
-from semantic_kernel.orchestration.sk_context import SKContext
-from semantic_kernel.orchestration.sk_function import SKFunction
+from semantic_kernel.orchestration.kernel_context import KernelContext
+from semantic_kernel.orchestration.kernel_function import KernelFunction
 from semantic_kernel.plugin_definition.default_kernel_plugin import DefaultKernelPlugin
 from semantic_kernel.plugin_definition.kernel_plugin_collection import KernelPluginCollection
 
@@ -86,15 +86,15 @@ def get_oai_config():
 
 
 @pytest.fixture()
-def context_factory() -> t.Callable[[ContextVariables], SKContext]:
-    """Return a factory for SKContext objects."""
+def context_factory() -> t.Callable[[ContextVariables], KernelContext]:
+    """Return a factory for KernelContext objects."""
 
-    def create_context(context_variables: ContextVariables, *functions: SKFunction) -> SKContext:
-        """Return a SKContext object."""
+    def create_context(context_variables: ContextVariables, *functions: KernelFunction) -> KernelContext:
+        """Return a KernelContext object."""
 
         plugin = DefaultKernelPlugin(name="test_plugin", functions=functions)
 
-        return SKContext(
+        return KernelContext(
             context_variables,
             NullMemory(),
             plugin_collection=KernelPluginCollection(

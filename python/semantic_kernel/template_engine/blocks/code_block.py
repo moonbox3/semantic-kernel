@@ -5,7 +5,7 @@ from typing import Any, List, Optional, Tuple
 
 import pydantic as pdt
 
-from semantic_kernel.orchestration.sk_function_base import SKFunctionBase
+from semantic_kernel.functions.kernel_function_base import KernelFunctionBase
 from semantic_kernel.plugin_definition.kernel_plugin_collection import KernelPluginCollection
 from semantic_kernel.template_engine.blocks.block import Block
 from semantic_kernel.template_engine.blocks.block_types import BlockTypes
@@ -115,7 +115,7 @@ class CodeBlock(Block):
 
     def _get_function_from_plugin_collection(
         self, plugins: KernelPluginCollection, f_block: FunctionIdBlock
-    ) -> Optional[SKFunctionBase]:
+    ) -> Optional[KernelFunctionBase]:
         # if f_block.plugin_name and plugins.has_function(f_block.plugin_name, f_block.function_name):
         #     return plugins.get_function(f_block.plugin_name, f_block.function_name)
 
