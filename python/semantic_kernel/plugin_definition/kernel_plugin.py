@@ -2,7 +2,6 @@
 
 import re
 from abc import ABC, abstractmethod
-from typing import List
 
 from pydantic import Field, field_validator
 

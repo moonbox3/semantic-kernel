@@ -7,7 +7,6 @@ from semantic_kernel import Kernel
 from semantic_kernel.functions.kernel_function_base import KernelFunctionBase
 from semantic_kernel.kernel_exception import KernelException
 from semantic_kernel.plugin_definition.kernel_function_decorator import kernel_function
-from semantic_kernel.plugin_definition.kernel_plugin_collection import KernelPluginCollection
 
 
 def not_decorated_native_function(arg1: str) -> str:

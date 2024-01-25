@@ -135,7 +135,7 @@ class Kernel:
         Creates a semantic function from the plugin name, function name and function config
 
         Args:
-            plugin_name (Optional[str]): The name of the plugin
+            plugin_name (Optional[str]): The name of the plugin. If empty, a random name will be generated.
             function_name (str): The name of the function
             function_config (SemanticFunctionConfig): The function config
 
@@ -166,7 +166,7 @@ class Kernel:
         Creates a native function from the plugin name and kernel function
 
         Args:
-            plugin_name (Optional[str]): The name of the plugin
+            plugin_name (Optional[str]): The name of the plugin. If empty, a random name will be generated.
             kernel_function (Callable): The kernel function
 
         Returns:
@@ -180,7 +180,7 @@ class Kernel:
         function_name = kernel_function.__kernel_function_name__
 
         if plugin_name is None or plugin_name == "":
-            plugin_name = f'p_{self.generate_random_ascii_name()}'
+            plugin_name = f"p_{self.generate_random_ascii_name()}"
         assert plugin_name is not None  # for type checker
 
         validate_plugin_name(plugin_name)
@@ -443,7 +443,7 @@ class Kernel:
             KernelPlugin: The imported plugin of type KernelPlugin.
         """
         if not plugin_name.strip():
-            logger.warn(f"Unable to import plugin due to missing plugin_name")
+            logger.warn("Unable to import plugin due to missing plugin_name")
             raise KernelException(
                 KernelException.ErrorCodes.InvalidPluginName,
                 "Plugin name cannot be empty",
@@ -481,7 +481,7 @@ class Kernel:
         plugin = DefaultKernelPlugin(name=plugin_name, functions=functions)
         # TODO: we shouldn't have to be adding functions to a plugin after the fact
         # This isn't done in dotnet, and needs to be revisited as we move to v1.0
-        # This is to support the current state of the code 
+        # This is to support the current state of the code
         if self._plugins.contains(plugin_name):
             self._plugins.add_functions_to_plugin(functions=functions, plugin_name=plugin_name)
         else:
@@ -817,8 +817,8 @@ class Kernel:
             function_config = SemanticFunctionConfig(config, template)
 
             # TODO: this is an example of where plugins are added to the collection in the kernel
-            # as part of the register_semantic_function, seems weird to have it hidden? 
-            # should the register function simply register the function and then we can add to the 
+            # as part of the register_semantic_function, seems weird to have it hidden?
+            # should the register function simply register the function and then we can add to the
             # plugin collecton later?
             functions += [self.register_semantic_function(plugin_directory_name, function_name, function_config)]
 

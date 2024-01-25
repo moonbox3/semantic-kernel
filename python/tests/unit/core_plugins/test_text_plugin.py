@@ -1,6 +1,5 @@
 import semantic_kernel as sk
 from semantic_kernel.core_plugins.text_plugin import TextPlugin
-from semantic_kernel.plugin_definition.kernel_plugin_collection import KernelPluginCollection
 
 
 def test_can_be_instantiated():
