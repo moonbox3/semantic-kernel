@@ -276,6 +276,10 @@ class KernelFunction(KernelFunctionBase):
         self._ai_request_settings = AIRequestSettings()
         self._chat_prompt_template = kwargs.get("chat_prompt_template", None)
 
+    def set_default_plugin_collection(self, plugins: KernelPluginCollection) -> "KernelFunction":
+        self._plugin_collection = plugins
+        return self
+
     def set_ai_service(self, ai_service: Callable[[], TextCompletionClientBase]) -> "KernelFunction":
         if ai_service is None:
             raise ValueError("AI LLM service factory cannot be `None`")

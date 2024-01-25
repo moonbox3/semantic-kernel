@@ -377,10 +377,7 @@ class Kernel:
         return context
 
     def func(self, plugin_name: str, function_name: str) -> KernelFunctionBase:
-        if self._plugins.has_native_function(plugin_name, function_name):
-            return self._plugins.get_native_function(plugin_name, function_name)
-
-        return self._plugins.get_semantic_function(plugin_name, function_name)
+        return self._plugins.get_plugin(name=plugin_name).get_function(function_name=function_name)
 
     def use_memory(
         self,
@@ -477,9 +474,14 @@ class Kernel:
                 ("Overloaded functions are not supported, " "please differentiate function names."),
             )
 
+        # This is legacy - figure out why we're setting all plugins on each function?
+        for func in functions:
+            func.set_default_plugin_collection(self._plugins)
+
         plugin = DefaultKernelPlugin(name=plugin_name, functions=functions)
-        # Note: we shouldn't have to be adding functions to a plugin after the fact
+        # TODO: we shouldn't have to be adding functions to a plugin after the fact
         # This isn't done in dotnet, and needs to be revisited as we move to v1.0
+        # This is to support the current state of the code 
         if self._plugins.contains(plugin_name):
             self._plugins.add_functions_to_plugin(functions=functions, plugin_name=plugin_name)
         else:
@@ -814,6 +816,10 @@ class Kernel:
             # Prepare lambda wrapping AI logic
             function_config = SemanticFunctionConfig(config, template)
 
+            # TODO: this is an example of where plugins are added to the collection in the kernel
+            # as part of the register_semantic_function, seems weird to have it hidden? 
+            # should the register function simply register the function and then we can add to the 
+            # plugin collecton later?
             functions += [self.register_semantic_function(plugin_directory_name, function_name, function_config)]
 
         plugin = DefaultKernelPlugin(name=plugin_directory_name, functions=functions)

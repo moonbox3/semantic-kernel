@@ -77,6 +77,7 @@ class KernelPluginCollection(KernelBaseModel):
 
         Raises:
             ValueError: If the function or plugin_name is None or invalid.
+            ValueError: if the function already exists in the plugin.
         """
         if not functions or not plugin_name:
             raise ValueError("Functions and plugin_name must not be None or empty")
@@ -88,8 +89,7 @@ class KernelPluginCollection(KernelBaseModel):
             if func.name not in plugin.functions:
                 plugin.functions[func.name] = func
             else:
-                # Decide here if you want to raise an exception or log and continue
-                raise ValueError(f"Function with name {func.name} already exists in plugin {plugin_name}")
+                raise ValueError(f"Function with name '{func.name}' already exists in plugin '{plugin_name}'")
 
     def add_range(self, plugins: List[KernelPlugin]) -> None:
         """

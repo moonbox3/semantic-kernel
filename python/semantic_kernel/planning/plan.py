@@ -243,7 +243,7 @@ class Plan(KernelFunctionBase):
                     "Plugin collection not found in the context",
                 )
             try:
-                pluginFunction = context.plugins.get_function(plan.plugin_name, plan.name)
+                pluginFunction = context.plugins.get_plugin(plan.plugin_name).get_function(plan.name)
                 plan.set_function(pluginFunction)
             except Exception:
                 pass
