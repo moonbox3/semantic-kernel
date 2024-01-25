@@ -102,7 +102,7 @@ async def main() -> None:
     )
 
     kernel.register_memory_store(memory_store=sk.memory.VolatileMemoryStore())
-    kernel.import_plugin(sk.core_plugins.TextMemoryPlugin())
+    kernel.import_plugin(sk.core_plugins.TextMemoryPlugin(), "TextMemoryPlugin")
 
     print("Populating memory...")
     await populate_memory(kernel)
