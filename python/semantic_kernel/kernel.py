@@ -146,7 +146,6 @@ class Kernel:
             ValueError: If the plugin name or function name are invalid
         """
         if plugin_name is None or plugin_name == "":
-            # plugin_name = f"p_{KernelPluginCollection.GLOBAL_PLUGIN}_{self.generate_random_ascii_name()}"
             plugin_name = f"p_{self.generate_random_ascii_name()}"
         assert plugin_name is not None  # for type checker
 
@@ -181,7 +180,7 @@ class Kernel:
         function_name = kernel_function.__kernel_function_name__
 
         if plugin_name is None or plugin_name == "":
-            plugin_name = KernelPluginCollection.GLOBAL_PLUGIN
+            plugin_name = f'p_{self.generate_random_ascii_name()}'
         assert plugin_name is not None  # for type checker
 
         validate_plugin_name(plugin_name)
@@ -435,23 +434,24 @@ class Kernel:
             return args
         return None
 
-    def import_plugin(self, plugin_instance: Any, plugin_name: str = "") -> KernelPlugin:
+    def import_plugin(self, plugin_instance: Any, plugin_name: str) -> KernelPlugin:
         """
         Import a plugin into the kernel.
 
         Args:
             plugin_instance (Any): The plugin instance.
-            plugin_name (str, optional): The name of the plugin. Defaults to "".
+            plugin_name (str): The name of the plugin. Allows chars: upper, lower ASCII and underscores.
 
         Returns:
             KernelPlugin: The imported plugin of type KernelPlugin.
         """
-        if plugin_name.strip() == "":
-            # plugin_name = KernelPluginCollection.GLOBAL_PLUGIN
-            plugin_name = plugin_instance.__class__.__name__
-            logger.debug(f"Importing plugin {plugin_name} into the global namespace")
-        else:
-            logger.debug(f"Importing plugin {plugin_name}")
+        if not plugin_name.strip():
+            logger.warn(f"Unable to import plugin due to missing plugin_name")
+            raise KernelException(
+                KernelException.ErrorCodes.InvalidPluginName,
+                "Plugin name cannot be empty",
+            )
+        logger.debug(f"Importing plugin {plugin_name}")
 
         functions = []
 

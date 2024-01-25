@@ -1,6 +1,6 @@
 import semantic_kernel as sk
 from semantic_kernel.core_plugins.text_plugin import TextPlugin
-from semantic_kernel.plugin_definition.plugin_collection import PluginCollection
+from semantic_kernel.plugin_definition.kernel_plugin_collection import KernelPluginCollection
 
 
 def test_can_be_instantiated():
@@ -9,8 +9,8 @@ def test_can_be_instantiated():
 
 def test_can_be_imported():
     kernel = sk.Kernel()
-    assert kernel.import_plugin(TextPlugin())
-    assert kernel.plugins[PluginCollection.GLOBAL_PLUGIN]["trim"].is_native
+    assert kernel.import_plugin(TextPlugin(), "text_plugin")
+    assert kernel.plugins["text_plugin"]["trim"].is_native
 
 
 def test_can_be_imported_with_name():

@@ -6,14 +6,12 @@ from pydantic import Field, model_validator
 
 from semantic_kernel.functions.kernel_function_base import KernelFunctionBase
 from semantic_kernel.kernel_pydantic import KernelBaseModel
-from semantic_kernel.plugin_definition import constants
 from semantic_kernel.plugin_definition.default_kernel_plugin import DefaultKernelPlugin
 from semantic_kernel.plugin_definition.functions_view import FunctionsView
 from semantic_kernel.plugin_definition.kernel_plugin import KernelPlugin
 
 
 class KernelPluginCollection(KernelBaseModel):
-    GLOBAL_PLUGIN: ClassVar[str] = constants.GLOBAL_PLUGIN
     plugins: Optional[Dict[str, KernelPlugin]] = Field(default_factory=dict)
 
     @model_validator(mode="before")
