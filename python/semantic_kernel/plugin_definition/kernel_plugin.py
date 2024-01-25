@@ -6,7 +6,6 @@ from typing import List
 
 from pydantic import Field, field_validator
 
-from semantic_kernel.functions.kernel_function_metadata import KernelFunctionMetadata
 from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 
@@ -46,13 +45,3 @@ class KernelPlugin(KernelBaseModel, ABC):
     def get_function(self, function_name: str):
         """Gets the function in the plugin with the specified name."""
         pass
-
-    def get_functions_metadata(self) -> List[KernelFunctionMetadata]:
-        """Gets the metadata for all functions in the plugin."""
-        metadata = []
-        for function in self:
-            function_metadata = KernelFunctionMetadata(function.metadata)
-            function_metadata.plugin_name = self.name
-            metadata.append(function_metadata)
-
-        return metadata
