@@ -1,10 +1,11 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-from typing import Dict
+from typing import Dict, TYPE_CHECKING
 
 from pydantic import Field, model_validator
 
-from semantic_kernel.functions.kernel_function_base import KernelFunctionBase
+if TYPE_CHECKING:
+    from semantic_kernel.functions.kernel_function_base import KernelFunctionBase
 from semantic_kernel.plugin_definition.kernel_plugin import KernelPlugin
 
 
@@ -22,7 +23,7 @@ class DefaultKernelPlugin(KernelPlugin):
     """
 
     # Todo: this needs to be converted to a KernelFunction type
-    functions: Dict[str, KernelFunctionBase] = Field(default_factory=dict)
+    functions: Dict[str, "KernelFunctionBase"] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     def list_to_dict(cls, values):
@@ -110,7 +111,7 @@ class DefaultKernelPlugin(KernelPlugin):
             raise KeyError(f"Function {name} not found.")
         return self.functions[name]
 
-    def from_function(function: KernelFunctionBase) -> "DefaultKernelPlugin":
+    def from_function(function: "KernelFunctionBase") -> "DefaultKernelPlugin":
         """
         Creates a DefaultKernelPlugin from a KernelFunctionBase instance.
 
