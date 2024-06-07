@@ -1,10 +1,13 @@
 # Copyright (c) Microsoft. All rights reserved.
 
+from typing import ClassVar
+
 from pydantic import SecretStr
-from pydantic_settings import BaseSettings
+
+from semantic_kernel.kernel_pydantic import KernelBaseSettings
 
 
-class BookingSampleSettings(BaseSettings):
+class BookingSampleSettings(KernelBaseSettings):
     """Restaurant Booking Sample settings
 
     The settings are first loaded from environment variables with the prefix 'BOOKING_'. If the
@@ -22,24 +25,10 @@ class BookingSampleSettings(BaseSettings):
     For more information on these required settings, please see the sample's README.md file.
     """
 
-    env_file_path: str | None = None
+    env_prefix: ClassVar[str] = "BOOKING_SAMPLE_"
+
     client_id: str
     tenant_id: str
     client_secret: SecretStr
     business_id: str
     service_id: str
-
-    class Config:
-        env_prefix = "BOOKING_"
-        env_file = None
-        env_file_encoding = "utf-8"
-        extra = "ignore"
-        case_sensitive = False
-
-    @classmethod
-    def create(cls, **kwargs):
-        if kwargs.get("env_file_path"):
-            cls.Config.env_file = kwargs["env_file_path"]
-        else:
-            cls.Config.env_file = None
-        return cls(**kwargs)

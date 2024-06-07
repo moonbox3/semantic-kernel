@@ -9,6 +9,7 @@ from msgraph import GraphServiceClient
 from pydantic import ValidationError
 
 from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.connectors.ai.function_call_behavior import FunctionCallBehavior
 from semantic_kernel.connectors.ai.open_ai.prompt_execution_settings.open_ai_prompt_execution_settings import (
     OpenAIChatPromptExecutionSettings,
 )
@@ -21,7 +22,7 @@ from semantic_kernel.kernel import Kernel
 kernel = Kernel()
 
 service_id = "open_ai"
-ai_service = OpenAIChatCompletion(service_id=service_id, ai_model_id="gpt-3.5-turbo-1106")
+ai_service = OpenAIChatCompletion(service_id=service_id)
 kernel.add_service(ai_service)
 
 try:
@@ -32,7 +33,7 @@ except ValidationError as e:
 tenant_id = booking_sample_settings.tenant_id
 client_id = booking_sample_settings.client_id
 client_secret = booking_sample_settings.client_secret
-client_secret_credential = ClientSecretCredential(tenant_id=tenant_id, client_id=client_id, client_secret=client_secret)
+client_secret_credential = ClientSecretCredential(tenant_id=tenant_id, client_id=client_id, client_secret=client_secret.get_secret_value())  # noqa: E501
 
 graph_client = GraphServiceClient(credentials=client_secret_credential, scopes=["https://graph.microsoft.com/.default"])
 
@@ -60,7 +61,7 @@ settings: OpenAIChatPromptExecutionSettings = kernel.get_prompt_execution_settin
 settings.max_tokens = 2000
 settings.temperature = 0.1
 settings.top_p = 0.8
-settings.function_call_behavior.enable_functions(auto_invoke=True, filters={"exclude_plugin": ["ChatBot"]})
+settings.function_call_behavior = FunctionCallBehavior.EnableFunctions(auto_invoke=True, filters={"excluded_plugins": ["ChatBot"]})  # noqa: E501
 
 chat_history = ChatHistory(
     system_message="When responding to the user's request to book a table, include the reservation ID."

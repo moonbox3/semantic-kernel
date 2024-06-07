@@ -435,10 +435,7 @@ class OpenAIChatCompletionBase(OpenAIHandler, ChatCompletionClientBase):
             parsed_args = function_call.parse_arguments()
             if parsed_args:
                 args_cloned.update(parsed_args)
-        except (FunctionCallInvalidArgumentsException, TypeError) as exc:
-            logger.exception(
-                f"Received invalid arguments for function {function_call.name}: {exc}. Trying tool call again."
-            )
+        except (FunctionCallInvalidArgumentsException, TypeError):
             frc = FunctionResultContent.from_function_call_content_and_result(
                 function_call_content=function_call,
                 result="The tool call arguments are malformed. Arguments must be in JSON format. Please try again.",
@@ -468,8 +465,8 @@ class OpenAIChatCompletionBase(OpenAIHandler, ChatCompletionClientBase):
                         f"Only functions: {enabled_functions} are allowed, {function_call.name} is not allowed."
                     )
             function_to_call = kernel.get_function(function_call.plugin_name, function_call.function_name)
-        except Exception as exc:
-            logger.exception(f"Could not find function {function_call.name}: {exc}.")
+        except Exception:
+            # logger.exception(f"Could not find function {function_call.name}: {exc}.")  # noqa: ERA001
             frc = FunctionResultContent.from_function_call_content_and_result(
                 function_call_content=function_call,
                 result="The tool call could not be found, please try again and make sure to validate the name.",
@@ -485,7 +482,6 @@ class OpenAIChatCompletionBase(OpenAIHandler, ChatCompletionClientBase):
                 f"{[param.name for param in function_to_call.parameters if param.is_required]}. "
                 "Please provide the required arguments and try again."
             )
-            logger.exception(msg)
             frc = FunctionResultContent.from_function_call_content_and_result(
                 function_call_content=function_call,
                 result=msg,
@@ -528,7 +524,6 @@ class OpenAIChatCompletionBase(OpenAIHandler, ChatCompletionClientBase):
             if result:
                 context.function_result = result
         except Exception as exc:
-            logger.exception(f"Error invoking function {context.function.fully_qualified_name}: {exc}.")
             value = f"An error occurred while invoking the function {context.function.fully_qualified_name}: {exc}"
             if context.function_result is not None:
                 context.function_result.value = value
