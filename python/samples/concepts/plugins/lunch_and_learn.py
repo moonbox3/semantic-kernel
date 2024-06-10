@@ -56,7 +56,7 @@ class SurprisePlugin:
         attendees = pd.read_excel(
             os.path.join(
                 os.path.dirname(__file__), 
-                "Attendee Information Form(1-1).xlsx",
+                "Attendee Information Form(1-47).xlsx",
             )
         )
 
