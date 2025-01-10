@@ -1,5 +1,5 @@
 # Copyright (c) Microsoft. All rights reserved.
-
+import logging
 import uuid
 
 from autogen_core import AgentId, MessageContext, SingleThreadedAgentRuntime
@@ -9,6 +9,8 @@ from semantic_kernel.processes.autogen_core_runtime.autogen_cancellation_token i
 from semantic_kernel.processes.autogen_core_runtime.autogen_process_agent import AGProcessAgent
 from semantic_kernel.processes.kernel_process.kernel_process import KernelProcess
 from semantic_kernel.processes.kernel_process.kernel_process_event import KernelProcessEvent
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class AGKernelProcessContext:
@@ -29,8 +31,8 @@ class AGKernelProcessContext:
     async def __aenter__(self):
         """Create & register the agent factory here, as an async context init step."""
 
-        async def process_factory():
-            agent = AGProcessAgent(
+        def process_factory():
+            return AGProcessAgent(
                 description=f"ProcessAgent_{self.process.state.name}",
                 kernel=self.kernel,
                 process=self.process,
@@ -38,16 +40,15 @@ class AGKernelProcessContext:
                 parent_process_id=None,
                 proc_id=self.proc_agent_id,
             )
-            await agent.initialize()
-            return agent
+
+        logger.info(f"[AGProcessAgent] Registering process agent: {self.proc_agent_id}")
 
         await self.runtime.register_factory(
-            type=f"ag_process_{self.proc_agent_id.key}",
+            type=self.proc_agent_id.type,
             agent_factory=process_factory,
             expected_class=AGProcessAgent,
         )
 
-        self.runtime.start()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
