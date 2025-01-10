@@ -26,7 +26,7 @@ from semantic_kernel.processes.kernel_process.kernel_process_step_state import (
 )
 from semantic_kernel.processes.process_builder import ProcessBuilder
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 
 
 class CommonEvents(Enum):

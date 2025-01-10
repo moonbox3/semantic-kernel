@@ -26,7 +26,7 @@ class AGKernelProcessContext:
         self.process = process
 
         proc_id = process.state.id or uuid.uuid4().hex
-        self.proc_agent_id = AgentId(f"ag_process_{proc_id}", proc_id)
+        self.proc_agent_id = AgentId(f"{proc_id}", proc_id)
 
     async def __aenter__(self):
         """Create & register the agent factory here, as an async context init step."""
@@ -38,7 +38,6 @@ class AGKernelProcessContext:
                 process=self.process,
                 runtime=self.runtime,
                 parent_process_id=None,
-                proc_id=self.proc_agent_id,
             )
 
         logger.info(f"[AGProcessAgent] Registering process agent: {self.proc_agent_id}")

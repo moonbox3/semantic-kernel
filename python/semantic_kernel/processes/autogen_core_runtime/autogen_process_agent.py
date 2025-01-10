@@ -3,7 +3,6 @@
 import asyncio
 import contextlib
 import logging
-import uuid
 from queue import Queue
 from typing import Any
 
@@ -43,7 +42,6 @@ class AGProcessAgent(AGStepAgent):
         process: KernelProcess,
         runtime: SingleThreadedAgentRuntime,
         parent_process_id: str | None = None,
-        proc_id: str | AgentId | None = None,
     ):
         """Create the AGProcessAgent."""
         super().__init__(description, kernel, process, parent_process_id=parent_process_id)
@@ -51,7 +49,6 @@ class AGProcessAgent(AGStepAgent):
         self.process = process
         self.ag_runtime = runtime
         self.parent_process_id = parent_process_id
-        self.proc_id = proc_id
         self.external_event_queue: Queue = Queue()
 
         # Keep a local copy of edges from the process so we can do
@@ -61,9 +58,6 @@ class AGProcessAgent(AGStepAgent):
         # All sub-step agents
         self.steps: list[AgentId] = []
 
-        # Unique ID for this process
-        self.id_str: str = process.state.id or uuid.uuid4().hex
-
         # Internal queue for events we receive (KernelProcessEvent, ProcessMessage, etc.)
         self._internal_queue: Queue[Any] = Queue()
 
@@ -72,11 +66,6 @@ class AGProcessAgent(AGStepAgent):
 
         self.process_task: asyncio.Task | None = None
         self.initialize_task: bool | None = False
-
-    @property
-    def ag_type(self) -> AgentId:
-        """A unique type name for the SingleThreadedAgentRuntime registry."""
-        return self.proc_id
 
     async def on_message_impl(self, message: Any, ctx: MessageContext) -> Any:
         """Handle messages addressed to this 'process' agent.
@@ -113,7 +102,7 @@ class AGProcessAgent(AGStepAgent):
 
         for step_info in self.process.steps:
 
-            def step_factory(step_info=step_info):  # Capture step_info as default argument
+            def step_factory(step_info=step_info):
                 return AGStepAgent(
                     f"StepAgent_{step_info.state.name}_{step_info.state.id}",
                     self.kernel,
@@ -121,10 +110,11 @@ class AGProcessAgent(AGStepAgent):
                     parent_process_id=self.id.key if isinstance(self.id, AgentId) else None,
                 )
 
-            agent_type_str = f"ag_step_{step_info.state.id}"
-            agent_id = AgentId(agent_type_str, step_info.state.id)
+            agent_id = AgentId(f"{step_info.state.id}", step_info.state.id)
 
-            logger.info(f"[AGProcessAgent] Registering sub-step agent: {agent_id}")
+            logger.info(
+                f"[AGProcessAgent] Registering sub-step agent: {agent_id} with step type: {step_info.inner_step_type}"
+            )
 
             await self.ag_runtime.register_factory(
                 agent_id.type,
@@ -167,8 +157,6 @@ class AGProcessAgent(AGStepAgent):
         message_channel: Queue[LocalMessage] = Queue()
         try:
             for _ in range(max_supersteps):
-                message_channel: Queue[LocalMessage] = Queue()
-
                 self.enqueue_external_messages(message_channel)
                 for step in self.steps:
                     await self.enqueue_step_messages(step, message_channel)
@@ -190,50 +178,10 @@ class AGProcessAgent(AGStepAgent):
 
                 await asyncio.gather(*message_tasks)
 
-                await self.ag_runtime.stop_when_idle()
-
         except asyncio.CancelledError:
             logger.info("[AGProcessAgent] internal_execute got cancelled.")
         except Exception as e:
             logger.error(f"[AGProcessAgent] internal_execute encountered error: {e}", exc_info=True)
-
-    async def _handle_incoming_item(self, item: Any):
-        """Decide how to route the item. If it's a KernelProcessEvent, find matching edges.
-
-        If it's a ProcessMessage or AGProcessMessage, handle accordingly.
-        """
-        match item:
-            case KernelProcessEvent() as evt:
-                event_id = evt.id
-                # If it references something like 'MyEvent' and we have edges for that
-                # then we produce AGProcessMessage and send to next step
-                if event_id in self.output_edges:
-                    for edge in self.output_edges[event_id]:
-                        msg = AGMessageFactory.create_from_edge(edge, evt.data)
-                        # Now actually send to next step
-                        step_type_str = f"ag_step_{edge.output_target.step_id}"
-                        target_agent = AgentId(step_type_str, edge.output_target.step_id)
-                        await self.send_message(msg, recipient=target_agent)
-                # If the event is 'public' and we want to pass it up, do so, etc.
-
-            case ProcessMessage() as pm:
-                # Possibly treat pm.target_event_id as an event
-                if pm.target_event_id and pm.target_event_id in self.output_edges:
-                    for edge in self.output_edges[pm.target_event_id]:
-                        msg = AGMessageFactory.create_from_edge(edge, pm.target_event_data)
-                        step_type_str = f"ag_step_{edge.output_target.step_id}"
-                        await self.send_message(msg, recipient=step_type_str)
-
-            case AGProcessMessage() as ag_msg:
-                # If it has a target_event_id, do the same approach
-                if ag_msg.target_event_id and ag_msg.target_event_id in self.output_edges:
-                    for edge in self.output_edges[ag_msg.target_event_id]:
-                        next_msg = AGMessageFactory.create_from_edge(edge, ag_msg.target_event_data)
-                        step_type_str = f"ag_step_{edge.output_target.step_id}"
-                        await self.send_message(next_msg, recipient=step_type_str)
-
-            case _:
-                logger.debug(f"[AGProcessAgent] _handle_incoming_item ignoring {item}")
 
     async def get_process_info(self) -> KernelProcess:
         """Return an updated KernelProcess from each sub-step agent.

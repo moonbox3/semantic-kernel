@@ -278,7 +278,7 @@ class AGStepAgent(KernelProcessMessageChannel, BaseAgent):
         """Generates a scoped event for the step."""
         if local_event is None:
             raise ValueError("The local event must be specified.")
-        local_event.namespace = f"{self.name}_{self.id}"
+        local_event.namespace = f"{self.name}_{self.id.type}"
         return local_event
 
     def scoped_event_from_kernel_process(self, process_event: "KernelProcessEvent") -> "LocalEvent":
