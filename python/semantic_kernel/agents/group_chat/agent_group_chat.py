@@ -13,7 +13,9 @@ from semantic_kernel.agents.strategies import (
 )
 from semantic_kernel.agents.strategies.selection.selection_strategy import SelectionStrategy
 from semantic_kernel.agents.strategies.termination.termination_strategy import TerminationStrategy
+from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
+from semantic_kernel.contents.history_reducer.chat_history_reducer import ChatHistoryReducer
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from semantic_kernel.exceptions.agent_exceptions import AgentChatException
 from semantic_kernel.utils.experimental_decorator import experimental_class
@@ -37,6 +39,7 @@ class AgentGroupChat(AgentChat):
         agents: list[Agent] | None = None,
         termination_strategy: TerminationStrategy | None = None,
         selection_strategy: SelectionStrategy | None = None,
+        chat_history: ChatHistory | None = None,
     ) -> None:
         """Initialize a new instance of AgentGroupChat.
 
@@ -44,6 +47,7 @@ class AgentGroupChat(AgentChat):
             agents: The agents to add to the group chat.
             termination_strategy: The termination strategy to use.
             selection_strategy: The selection strategy
+            chat_history: The chat history
         """
         agent_ids = {agent.id for agent in agents} if agents else set()
 
@@ -59,6 +63,8 @@ class AgentGroupChat(AgentChat):
             args["termination_strategy"] = termination_strategy
         if selection_strategy is not None:
             args["selection_strategy"] = selection_strategy
+        if chat_history is not None:
+            args["history"] = chat_history
 
         super().__init__(**args)
 
@@ -199,3 +205,16 @@ class AgentGroupChat(AgentChat):
 
             if self.is_complete:
                 break
+
+    async def reduce_history(self) -> bool:
+        """Perform the reduction on the provided history, returning True if reduction occurred."""
+        if not isinstance(self.history, ChatHistoryReducer):
+            return False
+
+        reducer = await self.history.reduce()
+        if reducer is not None:
+            self.history.messages.clear()
+            self.history.messages.extend(reducer.messages)
+            return True
+
+        return False

@@ -15,7 +15,7 @@ from semantic_kernel.contents.history_reducer.chat_history_truncation_reducer im
 from semantic_kernel.kernel import Kernel
 
 if TYPE_CHECKING:
-    from semantic_kernel.contents.history_reducer.chat_history_reducer import ChatHistoryReducer
+    pass
 
 #####################################################################
 # The following sample demonstrates how to implement a chat history #
@@ -58,9 +58,7 @@ class HistoryReducerExample:
     TRANSLATOR_NAME = "NumeroTranslator"  # Name of the agent
     TRANSLATOR_INSTRUCTIONS = "Add one to the latest user number and spell it in Spanish without explanation."
 
-    def create_truncating_agent(
-        self, reducer_msg_count: int, reducer_threshold: int
-    ) -> tuple[ChatCompletionAgent, "ChatHistoryReducer"]:
+    def create_truncating_agent(self, reducer_msg_count: int, reducer_threshold: int) -> ChatCompletionAgent:
         """
         Creates a ChatCompletionAgent with a truncation-based history reducer.
 
@@ -79,12 +77,9 @@ class HistoryReducerExample:
             name=self.TRANSLATOR_NAME,
             instructions=self.TRANSLATOR_INSTRUCTIONS,
             kernel=_create_kernel_with_chat_completion("truncate_agent"),
-            history_reducer=truncation_reducer,
-        ), truncation_reducer
+        )
 
-    def create_summarizing_agent(
-        self, reducer_msg_count: int, reducer_threshold: int
-    ) -> tuple[ChatCompletionAgent, "ChatHistoryReducer"]:
+    def create_summarizing_agent(self, reducer_msg_count: int, reducer_threshold: int) -> ChatCompletionAgent:
         """
         Creates a ChatCompletionAgent with a summarization-based history reducer.
 
@@ -97,18 +92,11 @@ class HistoryReducerExample:
         """
         kernel = _create_kernel_with_chat_completion("summarize_agent")
 
-        summarization_reducer = ChatHistorySummarizationReducer(
-            service=kernel.get_service(service_id="summarize_agent"),
-            target_count=reducer_msg_count,
-            threshold_count=reducer_threshold,
-        )
-
         return ChatCompletionAgent(
             name=self.TRANSLATOR_NAME,
             instructions=self.TRANSLATOR_INSTRUCTIONS,
             kernel=kernel,
-            history_reducer=summarization_reducer,
-        ), summarization_reducer
+        )
 
     async def invoke_agent(self, agent: ChatCompletionAgent, chat_history: ChatHistory, message_count: int):
         """
@@ -160,7 +148,7 @@ class HistoryReducerExample:
         - agent: The ChatCompletionAgent to invoke.
         - message_count: The number of messages to simulate in the conversation.
         """
-        chat = AgentGroupChat()  # Initialize a new group chat
+        chat = AgentGroupChat(chat_history=ChatHistoryTruncationReducer(target_count=10))  # Initialize a new group chat
         last_history_count = 0
 
         index = 1
@@ -169,6 +157,11 @@ class HistoryReducerExample:
             user_msg = ChatMessageContent(role=AuthorRole.USER, content=str(index))
             await chat.add_chat_message(user_msg)
             print(f"# User: '{index}'")
+
+            # Attempt to reduce history
+            is_reduced = await chat.reduce_history()
+            if is_reduced:
+                print("@ (History was reduced!)")
 
             # Invoke the agent and display its response
             async for message in chat.invoke(agent):
@@ -231,7 +224,7 @@ async def main():
     example = HistoryReducerExample()
 
     # Demonstrate truncation-based reduction
-    trunc_agent, history_reducer = example.create_truncating_agent(
+    trunc_agent = example.create_truncating_agent(
         # reducer_msg_count:
         # Purpose: Defines the target number of messages to retain after applying truncation or summarization.
         # What it controls: This parameter determines how much of the most recent conversation history
@@ -258,22 +251,22 @@ async def main():
     # await example.invoke_agent(trunc_agent, chat_history=history_reducer, message_count=50)
 
     # Demonstrate summarization-based reduction
-    sum_agent, history_reducer = example.create_summarizing_agent(
+    sum_agent = example.create_summarizing_agent(
         # Same configuration for summarization-based reduction
         reducer_msg_count=10,  # Target number of messages to retain
         reducer_threshold=10,  # Buffer to avoid premature reduction
     )
     print("\n===SummarizedAgentReduction Demo===")
-    await example.invoke_agent(sum_agent, chat_history=history_reducer, message_count=50)
+    # await example.invoke_agent(sum_agent, chat_history=history_reducer, message_count=50)
 
     # Demonstrate group chat with truncation
     print("\n===TruncatedChatReduction Demo===")
-    trunc_agent.history_reducer.messages.clear()
+    # trunc_agent.history_reducer.messages.clear()
     await example.invoke_chat(trunc_agent, message_count=50)
 
     # Demonstrate group chat with summarization
     print("\n===SummarizedChatReduction Demo===")
-    sum_agent.history_reducer.messages.clear()
+    # sum_agent.history_reducer.messages.clear()
     await example.invoke_chat(sum_agent, message_count=50)
 
 

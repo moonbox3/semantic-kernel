@@ -12,7 +12,6 @@ from semantic_kernel.connectors.ai.prompt_execution_settings import PromptExecut
 from semantic_kernel.const import DEFAULT_SERVICE_NAME
 from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
-from semantic_kernel.contents.history_reducer.chat_history_reducer import ChatHistoryReducer
 from semantic_kernel.contents.streaming_chat_message_content import StreamingChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from semantic_kernel.exceptions import KernelServiceNotFoundError
@@ -47,7 +46,6 @@ class ChatCompletionAgent(Agent):
         description: str | None = None,
         instructions: str | None = None,
         execution_settings: PromptExecutionSettings | None = None,
-        history_reducer: ChatHistoryReducer | None = None,
     ) -> None:
         """Initialize a new instance of ChatCompletionAgent.
 
@@ -78,8 +76,6 @@ class ChatCompletionAgent(Agent):
             args["id"] = id
         if kernel is not None:
             args["kernel"] = kernel
-        if history_reducer is not None:
-            args["history_reducer"] = history_reducer
         super().__init__(**args)
 
     @trace_agent_invocation

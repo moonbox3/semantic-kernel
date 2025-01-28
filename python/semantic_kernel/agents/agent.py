@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, ClassVar
 from pydantic import Field
 
 from semantic_kernel.agents.channels.agent_channel import AgentChannel
-from semantic_kernel.contents.history_reducer.chat_history_reducer import ChatHistoryReducer
 from semantic_kernel.kernel import Kernel
 from semantic_kernel.kernel_pydantic import KernelBaseModel
 from semantic_kernel.utils.experimental_decorator import experimental_class
@@ -15,7 +14,7 @@ from semantic_kernel.utils.naming import generate_random_ascii_name
 from semantic_kernel.utils.validation import AGENT_NAME_REGEX
 
 if TYPE_CHECKING:
-    from semantic_kernel.contents.chat_history import ChatHistory
+    pass
 
 
 @experimental_class
@@ -41,22 +40,6 @@ class Agent(KernelBaseModel):
     instructions: str | None = None
     kernel: Kernel = Field(default_factory=Kernel)
     channel_type: ClassVar[type[AgentChannel] | None] = None
-    history_reducer: ChatHistoryReducer | None = None
-
-    async def reduce_history(self, history: "ChatHistory") -> bool:
-        """Perform the reduction on the provided history, returning True if reduction occurred."""
-        if self.history_reducer is None:
-            return False
-
-        self.history_reducer.messages = history.messages
-
-        new_messages = await self.history_reducer.reduce()
-        if new_messages is not None:
-            history.messages.clear()
-            history.messages.extend(new_messages)
-            return True
-
-        return False
 
     def get_channel_keys(self) -> Iterable[str]:
         """Get the channel keys.
@@ -67,10 +50,6 @@ class Agent(KernelBaseModel):
         if not self.channel_type:
             raise NotImplementedError("Unable to get channel keys. Channel type not configured.")
         yield self.channel_type.__name__
-
-        if self.history_reducer is not None:
-            yield self.history_reducer.__class__.__name__
-            yield str(self.history_reducer.__hash__)
 
     async def create_channel(self) -> AgentChannel:
         """Create a channel.
