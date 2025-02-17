@@ -33,11 +33,11 @@ class AgentChannel(ABC):
         ...
 
     @abstractmethod
-    def invoke(
+    async def invoke(
         self,
         agent: "Agent",
         **kwargs: Any,
-    ) -> AsyncIterable[tuple[bool, "ChatMessageContent"]]:
+    ) -> tuple[bool, "ChatMessageContent"]:
         """Perform a discrete incremental interaction between a single Agent and AgentChat.
 
         Args:

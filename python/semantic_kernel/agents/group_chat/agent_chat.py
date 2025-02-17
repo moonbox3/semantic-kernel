@@ -143,11 +143,11 @@ class AgentChat(KernelBaseModel):
             channel: AgentChannel = await self._get_or_create_channel(agent)
             messages: list[ChatMessageContent] = []
 
-            async for is_visible, message in channel.invoke(agent):
-                messages.append(message)
-                self.history.messages.append(message)
-                if is_visible:
-                    yield message
+            is_visible, message = await channel.invoke(agent)
+            messages.append(message)
+            self.history.messages.append(message)
+            if is_visible:
+                yield message
 
             # Broadcast message to other channels (in parallel)
             # Note: Able to queue messages without synchronizing channels.

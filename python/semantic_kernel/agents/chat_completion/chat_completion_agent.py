@@ -155,23 +155,20 @@ class ChatCompletionAgent(Agent):
         Returns:
             An async iterable of ChatMessageContent.
         """
-        if history is None:
-            history = ChatHistory()
         if arguments is None:
             arguments = KernelArguments(**kwargs)
         else:
             arguments.update(kwargs)
 
-        if isinstance(message, str):
-            message = ChatMessageContent(role=AuthorRole.USER, content=message, name=self.name)
+        kernel = kernel or self.kernel
+        arguments = self.merge_arguments(arguments)
 
-        history.add_message(message)
+        chat_history = await self._assemble_final_chat_history(
+            message=message, kernel=kernel, arguments=arguments, history=history, **kwargs
+        )
 
         # Add the chat history to the args in the event that it is needed for prompt template configuration
         arguments["chat_history"] = history
-
-        kernel = kernel or self.kernel
-        arguments = self.merge_arguments(arguments)
 
         chat_completion_service, settings = await self._get_chat_completion_service_and_settings(
             kernel=kernel, arguments=arguments
@@ -182,18 +179,12 @@ class ChatCompletionAgent(Agent):
         if self.auto_function_calling:
             settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
 
-        chat = await self._setup_agent_chat_history(
-            history=history,
-            kernel=kernel,
-            arguments=arguments,
-        )
-
-        message_count = len(chat)
+        message_count = len(chat_history)
 
         logger.debug(f"[{type(self).__name__}] Invoking {type(chat_completion_service).__name__}.")
 
         response = await chat_completion_service.get_chat_message_content(
-            chat_history=chat,
+            chat_history=chat_history,
             settings=settings,
             kernel=kernel,
             arguments=arguments,
@@ -208,10 +199,11 @@ class ChatCompletionAgent(Agent):
         )
 
         # Capture mutated messages related function calling / tools
-        for message_index in range(message_count, len(chat)):
-            m = chat[message_index]
+        for message_index in range(message_count, len(chat_history)):
+            m = chat_history[message_index]
             m.name = self.name
-            history.add_message(m)
+            if history is not None:
+                history.add_message(m)
 
         response.name = self.name
         return response
@@ -237,23 +229,20 @@ class ChatCompletionAgent(Agent):
         Returns:
             An async generator of StreamingChatMessageContent.
         """
-        if not history:
-            history = ChatHistory()
         if arguments is None:
             arguments = KernelArguments(**kwargs)
         else:
             arguments.update(kwargs)
 
-        if isinstance(message, str):
-            message = ChatMessageContent(role=AuthorRole.USER, content=message, name=self.name)
+        kernel = kernel or self.kernel
+        arguments = self.merge_arguments(arguments)
 
-        history.add_message(message)
+        chat_history = await self._assemble_final_chat_history(
+            message=message, kernel=kernel, arguments=arguments, history=history, **kwargs
+        )
 
         # Add the chat history to the args in the event that it is needed for prompt template configuration
         arguments["chat_history"] = history
-
-        kernel = kernel or self.kernel
-        arguments = self.merge_arguments(arguments)
 
         chat_completion_service, settings = await self._get_chat_completion_service_and_settings(
             kernel=kernel, arguments=arguments
@@ -262,19 +251,13 @@ class ChatCompletionAgent(Agent):
         if self.auto_function_calling:
             settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
 
-        chat = await self._setup_agent_chat_history(
-            history=history,
-            kernel=kernel,
-            arguments=arguments,
-        )
-
-        message_count = len(chat)
+        message_count = len(chat_history)
 
         logger.debug(f"[{type(self).__name__}] Invoking {type(chat_completion_service).__name__}.")
 
         messages: AsyncGenerator[list[StreamingChatMessageContent], Any] = (
             chat_completion_service.get_streaming_chat_message_contents(
-                chat_history=chat,
+                chat_history=chat_history,
                 settings=settings,
                 kernel=kernel,
                 arguments=arguments,
@@ -296,29 +279,18 @@ class ChatCompletionAgent(Agent):
                 yield message
 
         # Capture mutated messages related function calling / tools
-        for message_index in range(message_count, len(chat)):
-            message = chat[message_index]  # type: ignore
+        for message_index in range(message_count, len(chat_history)):
+            message = chat_history[message_index]  # type: ignore
             message.name = self.name
-            history.add_message(message)
+            if history is not None:
+                history.add_message(message)
 
-        if role != AuthorRole.TOOL:
+        if role != AuthorRole.TOOL and history is not None:
             history.add_message(
                 ChatMessageContent(
                     role=role if role else AuthorRole.ASSISTANT, content="".join(message_builder), name=self.name
                 )
             )
-
-    async def _setup_agent_chat_history(
-        self, history: ChatHistory, kernel: "Kernel", arguments: KernelArguments
-    ) -> ChatHistory:
-        """Setup the agent chat history."""
-        formatted_instructions = await self.format_instructions(kernel, arguments)
-        messages = []
-        if formatted_instructions:
-            messages.append(ChatMessageContent(role=AuthorRole.SYSTEM, content=formatted_instructions, name=self.name))
-        if history.messages:
-            messages.extend(history.messages)
-        return ChatHistory(messages=messages)
 
     async def _get_chat_completion_service_and_settings(
         self, kernel: "Kernel", arguments: KernelArguments
@@ -333,3 +305,42 @@ class ChatCompletionAgent(Agent):
         assert settings is not None  # nosec
 
         return chat_completion_service, settings
+
+    async def _assemble_final_chat_history(
+        self,
+        message: str | ChatMessageContent | ChatHistoryChannel,
+        kernel: "Kernel",
+        arguments: KernelArguments,
+        existing_history: ChatHistory | None = None,
+        **kwargs: Any,
+    ) -> ChatHistory:
+        """Builds a final ChatHistory object.
+
+        1) Converting the incoming message param to a ChatHistory if needed
+        2) Injecting the system instructions (formatted_instructions) as a first message
+        3) Appending any existing user messages (if not already in the chat)
+        """
+        if existing_history is None:
+            existing_history = ChatHistory()
+
+        match message:
+            case ChatHistoryChannel():
+                for m in message.messages:
+                    existing_history.add_message(m)
+            case ChatMessageContent():
+                existing_history.add_message(message)
+            case str():
+                user_msg = ChatMessageContent(role=AuthorRole.USER, content=message, name=self.name)
+                existing_history.add_message(user_msg)
+
+        formatted_instructions = await self.format_instructions(kernel, arguments)
+        final_messages = []
+        if formatted_instructions:
+            final_messages.append(
+                ChatMessageContent(role=AuthorRole.SYSTEM, content=formatted_instructions, name=self.name)
+            )
+
+        if existing_history.messages:
+            final_messages.extend(existing_history.messages)
+
+        return ChatHistory(messages=final_messages)

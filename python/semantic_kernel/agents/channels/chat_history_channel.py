@@ -1,13 +1,13 @@
 # Copyright (c) Microsoft. All rights reserved.
 
 import sys
-from collections import deque
 from collections.abc import AsyncIterable
 from copy import deepcopy
 
 from semantic_kernel.contents.image_content import ImageContent
 from semantic_kernel.contents.streaming_text_content import StreamingTextContent
 from semantic_kernel.contents.text_content import TextContent
+from semantic_kernel.exceptions.agent_exceptions import AgentInvokeException
 
 if sys.version_info >= (3, 12):
     from typing import override  # pragma: no cover
@@ -15,7 +15,7 @@ else:
     from typing_extensions import override  # pragma: no cover
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, ClassVar, Deque, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
 
 from semantic_kernel.agents.channels.agent_channel import AgentChannel
 from semantic_kernel.contents import ChatMessageContent
@@ -36,7 +36,7 @@ class ChatHistoryAgentProtocol(Protocol):
     """Contract for an agent that utilizes a ChatHistoryChannel."""
 
     @abstractmethod
-    def invoke(self, history: "ChatHistory") -> AsyncIterable["ChatMessageContent"]:
+    async def invoke(self, history: "ChatHistory") -> "ChatMessageContent | None":
         """Invoke the chat history agent protocol."""
         ...
 
@@ -63,7 +63,7 @@ class ChatHistoryChannel(AgentChannel, ChatHistory):
         self,
         agent: "Agent",
         **kwargs: Any,
-    ) -> AsyncIterable[tuple[bool, ChatMessageContent]]:
+    ) -> tuple[bool, ChatMessageContent]:
         """Perform a discrete incremental interaction between a single Agent and AgentChat.
 
         Args:
@@ -74,44 +74,18 @@ class ChatHistoryChannel(AgentChannel, ChatHistory):
             An async iterable of ChatMessageContent.
         """
         if not isinstance(agent, ChatHistoryAgentProtocol):
-            id = getattr(agent, "id", "")
+            agent_id = getattr(agent, "id", "")
             raise ServiceInvalidTypeError(
-                f"Invalid channel binding for agent with id: `{id}` with name: ({type(agent).__name__})"
+                f"Invalid channel binding for agent with id: `{agent_id}` of type: ({type(agent).__name__})."
             )
 
-        message_count = len(self.messages)
-        mutated_history = set()
-        message_queue: Deque[ChatMessageContent] = deque()
+        response_message = await agent.invoke(self)
+        if response_message is None:
+            raise AgentInvokeException("The agent did not return a message.")
+        if response_message is not None:
+            self.messages.append(response_message)
 
-        async for response_message in agent.invoke(self):
-            # Capture all messages that have been included in the mutated history.
-            for message_index in range(message_count, len(self.messages)):
-                mutated_message = self.messages[message_index]
-                mutated_history.add(mutated_message)
-                message_queue.append(mutated_message)
-
-            # Update the message count pointer to reflect the current history.
-            message_count = len(self.messages)
-
-            # Avoid duplicating any message included in the mutated history and also returned by the enumeration result.
-            if response_message not in mutated_history:
-                self.messages.append(response_message)
-                message_queue.append(response_message)
-
-            # Dequeue the next message to yield.
-            yield_message = message_queue.popleft()
-            yield (
-                self._is_message_visible(message=yield_message, message_queue_count=len(message_queue)),
-                yield_message,
-            )
-
-        # Dequeue any remaining messages to yield.
-        while message_queue:
-            yield_message = message_queue.popleft()
-            yield (
-                self._is_message_visible(message=yield_message, message_queue_count=len(message_queue)),
-                yield_message,
-            )
+        return self._is_message_visible(response_message), response_message
 
     @override
     async def invoke_stream(
@@ -142,12 +116,9 @@ class ChatHistoryChannel(AgentChannel, ChatHistory):
         for message_index in range(message_count, len(self.messages)):
             messages.append(self.messages[message_index])
 
-    def _is_message_visible(self, message: ChatMessageContent, message_queue_count: int) -> bool:
+    def _is_message_visible(self, message: ChatMessageContent) -> bool:
         """Determine if a message is visible to the user."""
-        return (
-            not any(isinstance(item, (FunctionCallContent, FunctionResultContent)) for item in message.items)
-            or message_queue_count == 0
-        )
+        return not any(isinstance(item, (FunctionCallContent, FunctionResultContent)) for item in message.items)
 
     @override
     async def receive(
