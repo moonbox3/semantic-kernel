@@ -4,10 +4,13 @@ import logging
 from collections.abc import AsyncGenerator, AsyncIterable
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from pydantic import model_validator
+
 from semantic_kernel.agents import Agent
 from semantic_kernel.agents.channels.agent_channel import AgentChannel
 from semantic_kernel.agents.channels.chat_history_channel import ChatHistoryChannel
 from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
 from semantic_kernel.connectors.ai.prompt_execution_settings import PromptExecutionSettings
 from semantic_kernel.const import DEFAULT_SERVICE_NAME
 from semantic_kernel.contents.chat_history import ChatHistory
@@ -17,6 +20,7 @@ from semantic_kernel.contents.utils.author_role import AuthorRole
 from semantic_kernel.exceptions import KernelServiceNotFoundError
 from semantic_kernel.functions.kernel_arguments import KernelArguments
 from semantic_kernel.functions.kernel_function import TEMPLATE_FORMAT_MAP
+from semantic_kernel.functions.kernel_plugin import KernelPlugin
 from semantic_kernel.prompt_template.prompt_template_config import PromptTemplateConfig
 from semantic_kernel.utils.experimental_decorator import experimental_class
 from semantic_kernel.utils.telemetry.agent_diagnostics.decorators import trace_agent_invocation
@@ -38,9 +42,14 @@ class ChatCompletionAgent(Agent):
 
     service_id: str
     channel_type: ClassVar[type[AgentChannel]] = ChatHistoryChannel
+    service: ChatCompletionClientBase | None = None
+    plugins: list[KernelPlugin | object | dict[str, Any] | None] | None = None
+    auto_function_calling: bool = False
 
     def __init__(
         self,
+        service: ChatCompletionClientBase | None = None,
+        plugins: list[KernelPlugin | object | dict[str, Any] | None] | None = None,
         service_id: str | None = None,
         kernel: "Kernel | None" = None,
         name: str | None = None,
@@ -49,6 +58,7 @@ class ChatCompletionAgent(Agent):
         instructions: str | None = None,
         arguments: KernelArguments | None = None,
         prompt_template_config: PromptTemplateConfig | None = None,
+        auto_function_calling: bool = False,
     ) -> None:
         """Initialize a new instance of ChatCompletionAgent.
 
@@ -72,6 +82,10 @@ class ChatCompletionAgent(Agent):
             "service_id": service_id,
             "description": description,
         }
+        if plugins is not None:
+            args["plugins"] = plugins
+        if service is not None:
+            args["service"] = service
         if name is not None:
             args["name"] = name
         if id is not None:
@@ -97,19 +111,42 @@ class ChatCompletionAgent(Agent):
             if prompt_template_config.template is not None:
                 # Use the template from the prompt_template_config if it is provided
                 args["instructions"] = prompt_template_config.template
+        if auto_function_calling:
+            args["auto_function_calling"] = auto_function_calling
         super().__init__(**args)
 
-    @trace_agent_invocation
+    def _get_plugin_name(self, plugin: KernelPlugin | object | dict[str, Any] | None) -> str:
+        if plugin is None:
+            return "None"
+        if isinstance(plugin, dict):
+            return plugin.get("name", plugin.__class__.__name__)
+        if isinstance(plugin, KernelPlugin):
+            return plugin.name
+        return plugin.__class__.__name__
+
+    @model_validator(mode="after")
+    def configure_agent(self):
+        """Handle the plugins."""
+        if self.plugins:
+            for plugin in self.plugins:
+                name = self._get_plugin_name(plugin)
+                self.kernel.add_plugin(plugin, plugin_name=name)
+        if self.service:
+            self.kernel.add_service(self.service, overwrite=True)
+        return self
+
     async def invoke(
         self,
-        history: ChatHistory,
+        message: str | ChatMessageContent,
+        history: ChatHistory | None = None,
         arguments: KernelArguments | None = None,
         kernel: "Kernel | None" = None,
         **kwargs: Any,
-    ) -> AsyncIterable[ChatMessageContent]:
+    ) -> ChatMessageContent | None:
         """Invoke the chat history handler.
 
         Args:
+            message: The message to invoke.
             history: The chat history.
             arguments: The kernel arguments. (optional)
             kernel: The kernel instance. (optional)
@@ -118,10 +155,17 @@ class ChatCompletionAgent(Agent):
         Returns:
             An async iterable of ChatMessageContent.
         """
+        if history is None:
+            history = ChatHistory()
         if arguments is None:
             arguments = KernelArguments(**kwargs)
         else:
             arguments.update(kwargs)
+
+        if isinstance(message, str):
+            message = ChatMessageContent(role=AuthorRole.USER, content=message, name=self.name)
+
+        history.add_message(message)
 
         # Add the chat history to the args in the event that it is needed for prompt template configuration
         arguments["chat_history"] = history
@@ -135,6 +179,9 @@ class ChatCompletionAgent(Agent):
 
         assert isinstance(chat_completion_service, ChatCompletionClientBase)  # nosec
 
+        if self.auto_function_calling:
+            settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
+
         chat = await self._setup_agent_chat_history(
             history=history,
             kernel=kernel,
@@ -145,12 +192,15 @@ class ChatCompletionAgent(Agent):
 
         logger.debug(f"[{type(self).__name__}] Invoking {type(chat_completion_service).__name__}.")
 
-        messages = await chat_completion_service.get_chat_message_contents(
+        response = await chat_completion_service.get_chat_message_content(
             chat_history=chat,
             settings=settings,
             kernel=kernel,
             arguments=arguments,
         )
+
+        if response is None:
+            return None
 
         logger.info(
             f"[{type(self).__name__}] Invoked {type(chat_completion_service).__name__} "
@@ -159,18 +209,18 @@ class ChatCompletionAgent(Agent):
 
         # Capture mutated messages related function calling / tools
         for message_index in range(message_count, len(chat)):
-            message = chat[message_index]
-            message.name = self.name
-            history.add_message(message)
+            m = chat[message_index]
+            m.name = self.name
+            history.add_message(m)
 
-        for message in messages:
-            message.name = self.name
-            yield message
+        response.name = self.name
+        return response
 
     @trace_agent_invocation
     async def invoke_stream(
         self,
-        history: ChatHistory,
+        message: str | ChatMessageContent,
+        history: ChatHistory | None = None,
         arguments: KernelArguments | None = None,
         kernel: "Kernel | None" = None,
         **kwargs: Any,
@@ -178,6 +228,7 @@ class ChatCompletionAgent(Agent):
         """Invoke the chat history handler in streaming mode.
 
         Args:
+            message: The message to invoke.
             history: The chat history.
             arguments: The kernel arguments. (optional)
             kernel: The kernel instance. (optional)
@@ -186,10 +237,17 @@ class ChatCompletionAgent(Agent):
         Returns:
             An async generator of StreamingChatMessageContent.
         """
+        if not history:
+            history = ChatHistory()
         if arguments is None:
             arguments = KernelArguments(**kwargs)
         else:
             arguments.update(kwargs)
+
+        if isinstance(message, str):
+            message = ChatMessageContent(role=AuthorRole.USER, content=message, name=self.name)
+
+        history.add_message(message)
 
         # Add the chat history to the args in the event that it is needed for prompt template configuration
         arguments["chat_history"] = history
@@ -200,6 +258,9 @@ class ChatCompletionAgent(Agent):
         chat_completion_service, settings = await self._get_chat_completion_service_and_settings(
             kernel=kernel, arguments=arguments
         )
+
+        if self.auto_function_calling:
+            settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
 
         chat = await self._setup_agent_chat_history(
             history=history,
