@@ -1,11 +1,11 @@
 # Copyright (c) Microsoft. All rights reserved.
 
 import logging
-import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable, Iterable
 from typing import Any, ClassVar
 
+from autogen_core import RoutedAgent
 from pydantic import Field, model_validator
 
 from semantic_kernel.agents.channels.agent_channel import AgentChannel
@@ -24,7 +24,11 @@ from semantic_kernel.utils.validation import AGENT_NAME_REGEX
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-class Agent(KernelBaseModel, ABC):
+class AgentMetaClass(type(KernelBaseModel), type(RoutedAgent)):
+    """Meta class for Semantic Kernel agents."""
+
+
+class Agent(KernelBaseModel, RoutedAgent, ABC, metaclass=AgentMetaClass):
     """Base abstraction for all Semantic Kernel agents.
 
     An agent instance may participate in one or more conversations.
@@ -46,12 +50,15 @@ class Agent(KernelBaseModel, ABC):
 
     arguments: KernelArguments | None = None
     channel_type: ClassVar[type[AgentChannel] | None] = None
-    description: str | None = None
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     instructions: str | None = None
     kernel: Kernel = Field(default_factory=Kernel)
     name: str = Field(default_factory=lambda: f"agent_{generate_random_ascii_name()}", pattern=AGENT_NAME_REGEX)
     prompt_template: PromptTemplateBase | None = None
+
+    def __init__(self, description: str, **kwargs: Any):
+        """Initialize the agent."""
+        KernelBaseModel.__init__(self, **kwargs)
+        RoutedAgent.__init__(self, description)
 
     @staticmethod
     def _get_plugin_name(plugin: KernelPlugin | object) -> str:

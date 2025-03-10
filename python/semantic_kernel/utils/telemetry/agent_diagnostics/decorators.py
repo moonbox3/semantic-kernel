@@ -37,8 +37,8 @@ def trace_agent_invocation(invoke_func: Callable) -> Callable:
                 gen_ai_attributes.AGENT_NAME: agent.name,
             })
 
-            if agent.description:
-                span.set_attribute(gen_ai_attributes.AGENT_DESCRIPTION, agent.description)
+            if agent.instructions:
+                span.set_attribute(gen_ai_attributes.AGENT_DESCRIPTION, agent.instructions)
 
             async for response in invoke_func(*args, **kwargs):
                 yield response
@@ -65,8 +65,8 @@ def trace_agent_get_response(get_response_func: Callable) -> Callable:
                 gen_ai_attributes.AGENT_NAME: agent.name,
             })
 
-            if agent.description:
-                span.set_attribute(gen_ai_attributes.AGENT_DESCRIPTION, agent.description)
+            if agent.instructions:
+                span.set_attribute(gen_ai_attributes.AGENT_DESCRIPTION, agent.instructions)
 
             return await get_response_func(*args, **kwargs)
 

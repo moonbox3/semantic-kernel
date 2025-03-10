@@ -10,6 +10,7 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override  # pragma: no cover
 
+from autogen_core import MessageContext, default_subscription, message_handler
 from pydantic import Field, model_validator
 
 from semantic_kernel.agents import Agent
@@ -41,6 +42,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 @release_candidate
+@default_subscription
 class ChatCompletionAgent(Agent):
     """A Chat Completion Agent based on ChatCompletionClientBase."""
 
@@ -136,6 +138,13 @@ class ChatCompletionAgent(Agent):
             )
         self.kernel.add_service(self.service, overwrite=True)
         return self
+
+    @message_handler
+    async def _on_runtime_message(self, message: ChatHistory, ctx: MessageContext) -> None:
+        print(f"ChatCompletionAgent {self.name} received message: {message}")
+        response = await self.get_response(message)
+        print(f"ChatCompletionAgent {self.name} response: {response}")
+        await self.publish_message(response, ctx.topic_id)
 
     @trace_agent_get_response
     @override
