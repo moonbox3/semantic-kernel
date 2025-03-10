@@ -55,6 +55,9 @@ dependencies = [
 autogen = [
     "autogen-agentchat >= 0.2, <0.4"
 ]
+autogen_core = [
+    "autogen_core ~= 0.4"
+]
 azure = [
     "azure-ai-inference >= 1.0.0b6",
     "azure-ai-projects >= 1.0.0b5",
