@@ -1,6 +1,6 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from autogen_core import SingleThreadedAgentRuntime
 
@@ -10,9 +10,13 @@ from semantic_kernel.processes.autogen_runtime.message_buffer_agent import Messa
 from semantic_kernel.processes.autogen_runtime.process_agent import ProcessAgent
 from semantic_kernel.processes.autogen_runtime.step_agent import StepAgent
 
+if TYPE_CHECKING:
+    from semantic_kernel.kernel import Kernel
+
 
 async def register_autogen_agents(
     runtime: SingleThreadedAgentRuntime,
+    kernel: "Kernel",
     factories: dict[str, Callable] | None = None,
 ) -> None:
     """Registers agent types with SingleThreadedAgentRuntime.
@@ -23,7 +27,7 @@ async def register_autogen_agents(
         factories = {}
 
     async def process_agent_factory():  # noqa: RUF029
-        return ProcessAgent("process_agent", factories, runtime)
+        return ProcessAgent("process_agent", kernel, factories, runtime)
 
     await runtime.register_factory("process_agent", agent_factory=process_agent_factory, expected_class=ProcessAgent)
 

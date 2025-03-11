@@ -5,7 +5,7 @@ import contextlib
 import json
 import logging
 from queue import Queue
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autogen_core import AgentId, MessageContext, SingleThreadedAgentRuntime
 
@@ -24,7 +24,7 @@ from semantic_kernel.processes.autogen_runtime.messages import (
     SendProcessMessage,
     StartProcessMessage,
     StopProcessMessage,
-    ToDaprStepInfoMessage,
+    ToAutoGenStepInfoMessage,
 )
 from semantic_kernel.processes.autogen_runtime.step_agent import StepAgent
 from semantic_kernel.processes.const import END_PROCESS_ID
@@ -36,17 +36,21 @@ from semantic_kernel.processes.kernel_process.kernel_process_state import Kernel
 from semantic_kernel.processes.process_event import ProcessEvent
 from semantic_kernel.processes.process_message_factory import ProcessMessageFactory
 
+if TYPE_CHECKING:
+    from semantic_kernel.kernel import Kernel
+
 logger = logging.getLogger(__name__)
 
 
 class ProcessAgent(StepAgent):
     """A "Process" agent that inherits from StepAgent."""
 
-    def __init__(self, agent_id: str, factories: dict[str, Any], runtime: SingleThreadedAgentRuntime):
+    def __init__(self, agent_id: str, kernel: "Kernel", factories: dict[str, Any], runtime: SingleThreadedAgentRuntime):
         """Initialize the ProcessAgent."""
         super().__init__(agent_id, factories)
         # Now store the runtime
-        self.runtime = runtime
+        self._runtime = runtime
+        self.kernel = kernel
 
         self.process: AutoGenProcessInfo | None = None
         self.steps: list[AgentId] = []
@@ -105,16 +109,16 @@ class ProcessAgent(StepAgent):
                 # nested process
                 nested_process_id = AgentId("process_agent", step_id_str)
                 init_msg = InitializeProcessMessage(process_info=step_info, parent_process_id=self.id.key)
-                await self.runtime.send_message(init_msg, nested_process_id)
+                await self._runtime.send_message(init_msg, nested_process_id)
                 self.steps.append(nested_process_id)
             else:
                 # single step
                 step_agent_id = AgentId("step_agent", step_id_str)
-                step_payload = {"step_info": step_info.model_dump(), "parent_process_id": self.id.key}
+                step_payload = {"step_info": step_info.model_dump_json(), "parent_process_id": self.id.key}
                 init_step_msg = InitializeStepMessage(
                     step_info_json=json.dumps(step_payload), parent_process_id=self.id.key
                 )
-                await self.runtime.send_message(init_step_msg, step_agent_id)
+                await self._runtime.send_message(init_step_msg, step_agent_id)
                 self.steps.append(step_agent_id)
 
         logger.info(f"[ProcessAgent {self.id}] initialized with {len(self.steps)} steps.")
@@ -131,7 +135,7 @@ class ProcessAgent(StepAgent):
             raise ProcessEventUndefinedException("Must supply a process_event.")
         # Enqueue the event in external buffer
         ext_buf_id = AgentId("external_event_buffer_agent", self.id.key)
-        await self.runtime.send_message(
+        await self._runtime.send_message(
             EnqueueExternalEvent(event_json=msg.process_event.model_dump_json()), ext_buf_id
         )
 
@@ -155,7 +159,7 @@ class ProcessAgent(StepAgent):
             raise ValueError("No event specified")
         # Enqueue in external buffer
         ext_buf_id = AgentId("external_event_buffer_agent", self.id.key)
-        await self.runtime.send_message(
+        await self._runtime.send_message(
             EnqueueExternalEvent(event_json=msg.process_event.model_dump_json()), ext_buf_id
         )
 
@@ -168,21 +172,21 @@ class ProcessAgent(StepAgent):
         out_steps = []
         for step_id in self.steps:
             if step_id.type == "step_agent":
-                s_info = await self.runtime.send_message(ToDaprStepInfoMessage(), step_id)
-                from autogen_runtime.autogen_step_info import AutoGenStepInfo
+                s_info = await self._runtime.send_message(ToAutoGenStepInfoMessage(), step_id)
+                from semantic_kernel.processes.autogen_runtime.autogen_step_info import AutoGenStepInfo
 
-                out_steps.append(AutoGenStepInfo.model_validate(s_info))
+                out_steps.append(AutoGenStepInfo.model_validate(json.loads(s_info)))
             else:
                 # it's a process_agent
-                subp_info = await self.runtime.send_message(GetProcessInfoMessage(), step_id)
-                from autogen_runtime.autogen_process_info import AutoGenProcessInfo
+                subp_info = await self._runtime.send_message(GetProcessInfoMessage(), step_id)
+                from semantic_kernel.processes.autogen_runtime.autogen_process_info import AutoGenProcessInfo
 
-                out_steps.append(AutoGenProcessInfo.model_validate(subp_info))
+                out_steps.append(AutoGenProcessInfo.model_validate(json.loads(subp_info)))
 
         # build a new AutoGenProcessInfo
 
         new_state = KernelProcessState(name=self.process.state.name, id=self.id.key)
-        from autogen_runtime.autogen_process_info import AutoGenProcessInfo
+        from semantic_kernel.processes.autogen_runtime.autogen_process_info import AutoGenProcessInfo
 
         new_info = AutoGenProcessInfo(
             inner_step_python_type=self.process.inner_step_python_type,
@@ -190,7 +194,7 @@ class ProcessAgent(StepAgent):
             edges=self.process.edges,
             steps=out_steps,
         )
-        return new_info.model_dump()
+        return new_info.model_dump_json()
 
     async def _internal_execute(self, max_supersteps=100, keep_alive=True):
         """The main loop for delivering external events, step messages, etc."""
@@ -203,47 +207,45 @@ class ProcessAgent(StepAgent):
 
             # prepare_incoming
             for step_id in self.steps:
-                await self.runtime.send_message(PrepareIncomingMessagesMessage(), step_id)
+                await self._runtime.send_message(PrepareIncomingMessagesMessage(), step_id)
 
             # check if no messages + not keep_alive
             no_msgs = True
             for step_id in self.steps:
-                c = await self.runtime.send_message(CountPreparedMessages(), step_id)
+                c = await self._runtime.send_message(CountPreparedMessages(), step_id)
                 if c > 0:
                     no_msgs = False
                     break
             if no_msgs and not keep_alive:
                 # double check external
                 ext_buf_id = AgentId("external_event_buffer_agent", self.id.key)
-                leftover = await self.runtime.send_message(DequeueAllExternalEvents(), ext_buf_id)
+                leftover = await self._runtime.send_message(DequeueAllExternalEvents(), ext_buf_id)
                 if leftover:
                     for ev_str in leftover:
-                        await self.runtime.send_message(EnqueueExternalEvent(event_json=ev_str), ext_buf_id)
+                        await self._runtime.send_message(EnqueueExternalEvent(event_json=ev_str), ext_buf_id)
                     no_msgs = False
                 if no_msgs:
                     break
 
             # process_incoming
             for step_id in self.steps:
-                await self.runtime.send_message(ProcessIncomingMessagesMessage(), step_id)
+                await self._runtime.send_message(ProcessIncomingMessagesMessage(), step_id)
 
             # handle public events
             await self._handle_public_events()
 
     async def _check_end(self) -> bool:
-        from autogen_runtime.messages import DequeueAllMessages
+        from semantic_kernel.processes.autogen_runtime.messages import DequeueAllMessages
 
         end_mb_id = AgentId("message_buffer_agent", f"{self.id.key}.{END_PROCESS_ID}")
-        leftover = await self.runtime.send_message(DequeueAllMessages(), end_mb_id)
+        leftover = await self._runtime.send_message(DequeueAllMessages(), end_mb_id)
         return bool(leftover)
 
     async def _handle_external_events(self):
-        from autogen_runtime.messages import DequeueAllExternalEvents
+        from semantic_kernel.processes.autogen_runtime.messages import DequeueAllExternalEvents
 
         ext_buf_id = AgentId("external_event_buffer_agent", self.id.key)
-        leftover = await self.runtime.send_message(DequeueAllExternalEvents(), ext_buf_id)
-
-        import json
+        leftover = await self._runtime.send_message(DequeueAllExternalEvents(), ext_buf_id)
 
         event_objs = []
         for s in leftover:
@@ -260,20 +262,16 @@ class ProcessAgent(StepAgent):
                     pm = ProcessMessageFactory.create_from_edge(edge, ev.data)
                     target_step = edge.output_target.step_id
                     if target_step:
-                        import json
+                        from semantic_kernel.processes.autogen_runtime.messages import EnqueueMessage
 
-                        from autogen_runtime.messages import EnqueueMessage
-
-                        mb_id = AgentId("message_buffer_agent", f"{self.id.key}.{target_step}")
-                        pm_json = json.dumps(pm.model_dump())
-                        await self.runtime.send_message(EnqueueMessage(message_json=pm_json), mb_id)
+                        mb_id = AgentId("message_buffer_agent", target_step)
+                        await self._runtime.send_message(EnqueueMessage(message_json=pm.model_dump_json()), mb_id)
 
     async def _handle_public_events(self):
-        from autogen_runtime.messages import DequeueAllEvents
+        from semantic_kernel.processes.autogen_runtime.messages import DequeueAllEvents
 
         evbuf_id = AgentId("event_buffer_agent", self.id.key)
-        leftover = await self.runtime.send_message(DequeueAllEvents(), evbuf_id)
-        import json
+        leftover = await self._runtime.send_message(DequeueAllEvents(), evbuf_id)
 
         for s in leftover:
             loaded = json.loads(s)
@@ -286,10 +284,7 @@ class ProcessAgent(StepAgent):
                 for edge in self.output_edges[p_ev.id]:
                     pm = ProcessMessageFactory.create_from_edge(edge, p_ev.data)
                     if edge.output_target.step_id:
-                        from autogen_runtime.messages import EnqueueMessage
+                        from semantic_kernel.processes.autogen_runtime.messages import EnqueueMessage
 
-                        mb_id = AgentId(
-                            "message_buffer_agent", f"{self.parent_process_id}.{edge.output_target.step_id}"
-                        )
-                        pm_json = json.dumps(pm.model_dump())
-                        await self.runtime.send_message(EnqueueMessage(message_json=pm_json), mb_id)
+                        mb_id = AgentId("message_buffer_agent", edge.output_target.step_id)
+                        await self._runtime.send_message(EnqueueMessage(message_json=pm.model_dump_json()), mb_id)

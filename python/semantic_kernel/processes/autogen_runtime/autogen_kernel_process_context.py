@@ -1,5 +1,6 @@
 # Copyright (c) Microsoft. All rights reserved.
 
+import json
 import uuid
 
 from autogen_core import AgentId, SingleThreadedAgentRuntime
@@ -63,5 +64,5 @@ class AutoGenKernelProcessContext:
         """Retrieve current state by sending a GetProcessInfoMessage, then reconstructing the KernelProcess."""
         info = await self.runtime.send_message(GetProcessInfoMessage(), self.process_agent_id)
 
-        autogen_proc_info = AutoGenProcessInfo.model_validate(info)
+        autogen_proc_info = AutoGenProcessInfo.model_validate(json.loads(info))
         return autogen_proc_info.to_kernel_process()

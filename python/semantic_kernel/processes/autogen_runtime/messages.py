@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-from dataclasses import dataclass
 
+from semantic_kernel.kernel_pydantic import KernelBaseModel
 from semantic_kernel.processes.autogen_runtime.autogen_process_info import AutoGenProcessInfo
 from semantic_kernel.processes.kernel_process.kernel_process_event import KernelProcessEvent
 
@@ -10,16 +10,14 @@ from semantic_kernel.processes.kernel_process.kernel_process_event import Kernel
 #
 
 
-@dataclass
-class InitializeStepMessage:
-    """Tells a StepAgent to initialize itself with a DaprStepInfo-like payload in JSON form."""
+class InitializeStepMessage(KernelBaseModel):
+    """Tells a StepAgent to initialize itself with a AutoGenStepInfo payload in JSON form."""
 
     step_info_json: str
     parent_process_id: str | None = None
 
 
-@dataclass
-class PrepareIncomingMessagesMessage:
+class PrepareIncomingMessagesMessage(KernelBaseModel):
     """Tells a StepAgent to dequeue all pending messages from its local queue.
 
     Returns the count of retrieved messages.
@@ -28,22 +26,19 @@ class PrepareIncomingMessagesMessage:
     pass
 
 
-@dataclass
-class ProcessIncomingMessagesMessage:
+class ProcessIncomingMessagesMessage(KernelBaseModel):
     """Tells a StepAgent to process everything it has queued up."""
 
     pass
 
 
-@dataclass
-class ToDaprStepInfoMessage:
-    """Asks a StepAgent to return a `DaprStepInfo` describing the current state of this step."""
+class ToAutoGenStepInfoMessage(KernelBaseModel):
+    """Asks a StepAgent to return a `AutoGenStepInfo` describing the current state of this step."""
 
     pass
 
 
-@dataclass
-class CountPreparedMessages:
+class CountPreparedMessages(KernelBaseModel):
     """For debugging. StepAgent: how many messages do you have queued up?"""
 
     pass
@@ -54,44 +49,38 @@ class CountPreparedMessages:
 #
 
 
-@dataclass
-class InitializeProcessMessage:
+class InitializeProcessMessage(KernelBaseModel):
     """Tells a ProcessAgent to initialize with a DaprProcessInfo plus optional parent ID."""
 
     process_info: AutoGenProcessInfo
     parent_process_id: str | None = None
 
 
-@dataclass
-class StartProcessMessage:
+class StartProcessMessage(KernelBaseModel):
     """Tells a ProcessAgent to start running in the background."""
 
     keep_alive: bool = True
 
 
-@dataclass
-class RunOnceMessage:
+class RunOnceMessage(KernelBaseModel):
     """Tells a ProcessAgent to accept a KernelProcessEvent once, run the loop, and then stop."""
 
     process_event: KernelProcessEvent
 
 
-@dataclass
-class StopProcessMessage:
+class StopProcessMessage(KernelBaseModel):
     """Tells a ProcessAgent to stop."""
 
     pass
 
 
-@dataclass
-class SendProcessMessage:
+class SendProcessMessage(KernelBaseModel):
     """Tells a ProcessAgent to queue a KernelProcessEvent without forcibly starting."""
 
     process_event: KernelProcessEvent
 
 
-@dataclass
-class GetProcessInfoMessage:
+class GetProcessInfoMessage(KernelBaseModel):
     """Asks a ProcessAgent to return a dict describing the current process state."""
 
     pass
@@ -102,43 +91,37 @@ class GetProcessInfoMessage:
 #
 
 
-@dataclass
-class EnqueueEvent:
+class EnqueueEvent(KernelBaseModel):
     """For event buffer, Please enqueue this event JSON."""
 
     event_json: str
 
 
-@dataclass
-class DequeueAllEvents:
+class DequeueAllEvents(KernelBaseModel):
     """For event buffer. Dequeue all events, return them as a list."""
 
     pass
 
 
-@dataclass
-class EnqueueExternalEvent:
+class EnqueueExternalEvent(KernelBaseModel):
     """For external event buffer. Please enqueue this external event JSON."""
 
     event_json: str
 
 
-@dataclass
-class DequeueAllExternalEvents:
+class DequeueAllExternalEvents(KernelBaseModel):
     """For external event buffer."""
 
     pass
 
 
-@dataclass
-class EnqueueMessage:
+class EnqueueMessage(KernelBaseModel):
     """For message buffer. Enqueue a message string."""
 
     message_json: str
 
 
-@dataclass
-class DequeueAllMessages:
+class DequeueAllMessages(KernelBaseModel):
     """For message buffer. Dequeue all messages, returning them."""
 
     pass

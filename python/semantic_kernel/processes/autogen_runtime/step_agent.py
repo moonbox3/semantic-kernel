@@ -1,13 +1,16 @@
 # Copyright (c) Microsoft. All rights reserved.
 
 import asyncio
+import importlib
 import json
 import logging
+from inspect import isawaitable
 from queue import Queue
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autogen_core import AgentId, BaseAgent, MessageContext
 
+from semantic_kernel.exceptions.kernel_exceptions import KernelException
 from semantic_kernel.exceptions.process_exceptions import (
     ProcessFunctionNotFoundException,
 )
@@ -19,7 +22,7 @@ from semantic_kernel.processes.autogen_runtime.messages import (
     InitializeStepMessage,
     PrepareIncomingMessagesMessage,
     ProcessIncomingMessagesMessage,
-    ToDaprStepInfoMessage,
+    ToAutoGenStepInfoMessage,
 )
 from semantic_kernel.processes.kernel_process.kernel_process_event import (
     KernelProcessEvent,
@@ -30,7 +33,11 @@ from semantic_kernel.processes.kernel_process.kernel_process_step_state import K
 from semantic_kernel.processes.process_event import ProcessEvent
 from semantic_kernel.processes.process_message import ProcessMessage
 from semantic_kernel.processes.process_message_factory import ProcessMessageFactory
+from semantic_kernel.processes.process_types import get_generic_state_type
 from semantic_kernel.processes.step_utils import find_input_channels
+
+if TYPE_CHECKING:
+    from semantic_kernel.kernel import Kernel
 
 logger = logging.getLogger(__name__)
 
@@ -38,14 +45,16 @@ logger = logging.getLogger(__name__)
 class StepAgent(BaseAgent):
     """A base "step" agent."""
 
-    def __init__(self, agent_id: str, factories: dict[str, Any]):
+    def __init__(self, agent_id: str, kernel: "Kernel", factories: dict[str, Any]):
         """Initialize the StepAgent."""
         super().__init__(agent_id)
+        self.kernel = kernel
         self.factories = factories
 
         self.parent_process_id: str | None = None
         self.step_info: AutoGenStepInfo | None = None
         self.initialize_task: bool = False
+        self.inner_step_type: str | None = None
         self.incoming_messages: Queue[ProcessMessage] = Queue()
         self.step_state: KernelProcessStepState | None = None
         self.output_edges: dict[str, Any] = {}
@@ -63,7 +72,7 @@ class StepAgent(BaseAgent):
             return await self._handle_prepare_incoming_messages()
         if isinstance(message, ProcessIncomingMessagesMessage):
             return await self._handle_process_incoming_messages()
-        if isinstance(message, ToDaprStepInfoMessage):
+        if isinstance(message, ToAutoGenStepInfoMessage):
             return await self._handle_to_dapr_step_info()
         if isinstance(message, CountPreparedMessages):
             return self.incoming_messages.qsize()
@@ -81,16 +90,18 @@ class StepAgent(BaseAgent):
             raise ValueError("No 'step_info' provided in initialize_step payload")
 
         # parse AutoGenStepInfo
-        self.step_info = AutoGenStepInfo.model_validate(step_info_dict)
+        self.step_info = AutoGenStepInfo.model_validate(json.loads(step_info_dict))
+        self.inner_step_type = self.step_info.inner_step_python_type
+
         self.step_state = self.step_info.state
         self.output_edges = dict(self.step_info.edges)
         self.parent_process_id = msg.parent_process_id
         self.initialize_task = True
 
     async def _handle_prepare_incoming_messages(self) -> int:
-        from autogen_runtime.messages import DequeueAllMessages
+        from semantic_kernel.processes.autogen_runtime.messages import DequeueAllMessages
 
-        mb_id = AgentId("message_buffer_agent", self.id.key)
+        mb_id = AgentId("message_buffer_agent", f"{self.step_info.state.id}")
         raw_list = await self.runtime.send_message(DequeueAllMessages(), mb_id)
 
         count = 0
@@ -153,37 +164,103 @@ class StepAgent(BaseAgent):
     async def _handle_to_dapr_step_info(self) -> dict:
         if self.step_info and self.step_state:
             self.step_info.state = self.step_state
-        return self.step_info.model_dump() if self.step_info else {}
+        return self.step_info.model_dump_json() if self.step_info else {}
+
+    def _get_class_from_string(self, full_class_name: str):
+        """Gets a class from a string."""
+        module_name, class_name = full_class_name.rsplit(".", 1)
+        module = importlib.import_module(module_name)
+        return getattr(module, class_name)
 
     async def _activate_step(self):
-        """Actually create the underlying step object if needed, register plugin functions, etc."""
-        if not self.step_info:
-            raise ValueError("step_info not set; cannot activate step.")
-        # if you have factories for custom step classes:
-        if self.factories and (self.step_info.inner_step_python_type in self.factories):
-            step_obj = self.factories[self.step_info.inner_step_python_type]()
-            if asyncio.iscoroutine(step_obj):
-                step_obj = await step_obj
-            step_instance: KernelProcessStep = step_obj  # type: ignore
+        # Instantiate an instance of the inner step object and retrieve its class reference.
+        if self.factories and self.inner_step_type in self.factories:
+            step_object = self.factories[self.inner_step_type]()
+            if isawaitable(step_object):
+                step_object = await step_object
+            step_cls = step_object.__class__
+            step_instance: KernelProcessStep = step_object  # type: ignore
         else:
-            # fallback reflection
-            parts = self.step_info.inner_step_python_type.rsplit(".", 1)
-            mod = __import__(parts[0], fromlist=[parts[1]])
-            cls_ = getattr(mod, parts[1])
-            step_instance: KernelProcessStep = cls_()  # type: ignore
+            step_cls = self._get_class_from_string(self.inner_step_type)
+            step_instance: KernelProcessStep = step_cls()  # type: ignore
 
-        kernel = Kernel()
-        plugin = kernel.add_plugin(step_instance, self.step_info.state.name)
-        for name, fn in plugin.functions.items():
-            self.functions[name] = fn
+        kernel_plugin = self.kernel.add_plugin(
+            step_instance,
+            self.step_info.state.name if self.step_info.state else "default_name",
+        )
 
-        # set up inputs
-        self.initial_inputs = find_input_channels(self, self.functions)
-        self.inputs = {k: dict(v) for k, v in self.initial_inputs.items()}
+        # Load the kernel functions.
+        for name, f in kernel_plugin.functions.items():
+            self.functions[name] = f
 
-        # run step_instance.activate() if needed
-        if self.step_state:
-            await step_instance.activate(self.step_state)
+        # Initialize the input channels.
+        self.initial_inputs = find_input_channels(channel=self, functions=self.functions)
+        self.inputs = {k: {kk: vv for kk, vv in v.items()} if v else {} for k, v in self.initial_inputs.items()}
+
+        # Use the existing state or create a new one if not provided.
+        state_object = self.step_info.state
+
+        # Extract TState from inner_step_type using the class reference.
+        t_state = get_generic_state_type(step_cls)
+
+        if t_state is not None:
+            state_type = KernelProcessStepState[t_state]
+
+            if state_object is None:
+                # Create a fresh step state object if none is provided.
+                state_object = state_type(
+                    name=step_cls.__name__,
+                    id=step_cls.__name__,
+                    state=None,
+                )
+            else:
+                # Ensure that state_object is an instance of the expected type.
+                if not isinstance(state_object, KernelProcessStepState):
+                    error_message = "State object is not of the expected KernelProcessStepState type."
+                    raise KernelException(error_message)
+
+                # await self._state_manager.try_add_state(
+                #     ActorStateKeys.StepStateType.value,
+                #     get_fully_qualified_name(t_state),
+                # )
+                # await self._state_manager.try_add_state(
+                #     ActorStateKeys.StepStateJson.value,
+                #     json.dumps(state_object.model_dump()),
+                # )
+                # await self._state_manager.save_state()
+
+            # If state is None, instantiate it. If it exists but is not the right type, validate it.
+            if state_object.state is None:
+                try:
+                    state_object.state = t_state()
+                except Exception as e:
+                    error_message = f"Cannot instantiate state of type {t_state}: {e}"
+                    raise KernelException(error_message)
+            else:
+                # Convert the existing state if it's not already an instance of t_state
+                if not isinstance(state_object.state, t_state):
+                    try:
+                        state_object.state = t_state.model_validate(state_object.state)
+                    except Exception as e:
+                        error_message = f"Cannot validate state of type {t_state}: {e}"
+                        raise KernelException(error_message)
+        else:
+            # The step has no user-defined state; use the base KernelProcessStepState.
+            state_type = KernelProcessStepState
+            if state_object is None:
+                state_object = state_type(
+                    name=step_cls.__name__,
+                    id=step_cls.__name__,
+                    state=None,
+                )
+
+        if state_object is None:
+            error_message = "The state object for the KernelProcessStep could not be created."
+            raise KernelException(error_message)
+
+        # Set the step state and activate the step with the state object.
+        self.step_state = state_object
+        await step_instance.activate(state_object)
 
     async def _emit_event(self, kp_event: KernelProcessEvent):
         """Emit event to parent's event buffer if public, or local edges."""
@@ -198,10 +275,10 @@ class StepAgent(BaseAgent):
         if kp_event.visibility == KernelProcessEventVisibility.Public and self.parent_process_id:
             import json
 
-            from autogen_runtime.messages import EnqueueEvent
+            from semantic_kernel.processes.autogen_runtime.messages import EnqueueEvent
 
             eb_id = AgentId("event_buffer_agent", self.parent_process_id)
-            await self.runtime.send_message(EnqueueEvent(event_json=json.dumps(local_event.model_dump())), eb_id)
+            await self.runtime.send_message(EnqueueEvent(event_json=json.dumps(local_event.model_dump_json())), eb_id)
 
         # local edges
         import json
@@ -210,13 +287,12 @@ class StepAgent(BaseAgent):
         for edge in edges:
             pm = ProcessMessageFactory.create_from_edge(edge, kp_event.data)
             if self.parent_process_id:
-                mb_id = AgentId("message_buffer_agent", f"{self.parent_process_id}.{edge.output_target.step_id}")
+                mb_id = AgentId("message_buffer_agent", f"{edge.output_target.step_id}")
             else:
                 mb_id = AgentId("message_buffer_agent", edge.output_target.step_id)
-            from autogen_runtime.messages import EnqueueMessage
+            from semantic_kernel.processes.autogen_runtime.messages import EnqueueMessage
 
-            msg_json = json.dumps(pm.model_dump())
-            await self.runtime.send_message(EnqueueMessage(message_json=msg_json), mb_id)
+            await self.runtime.send_message(EnqueueMessage(message_json=pm.model_dump_json()), mb_id)
 
     @property
     def name(self) -> str:

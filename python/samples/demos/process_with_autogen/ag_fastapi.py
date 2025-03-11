@@ -2,13 +2,10 @@ import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
-
-# -- AutoGen runtime imports --
 from autogen_core import SingleThreadedAgentRuntime
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-# Your existing imports
 from samples.demos.process_with_dapr.process.process import get_process
 from samples.demos.process_with_dapr.process.steps import CommonEvents, CStepState
 from semantic_kernel import Kernel
@@ -16,20 +13,11 @@ from semantic_kernel.processes.autogen_runtime.autogen_actor_registration import
 from semantic_kernel.processes.autogen_runtime.autogen_kernel_process import start as autogen_start
 from semantic_kernel.processes.kernel_process.kernel_process_step_state import KernelProcessStepState
 
-# ---------------
-
 logging.basicConfig(level=logging.WARNING)
 
 # Get the kernel and the process (as in your original code)
 kernel = Kernel()
 process = get_process()
-
-#######################################################################
-# Instead of Dapr Actors, we will:
-#   1) Create a SingleThreadedAgentRuntime on startup
-#   2) Register the process/step agents (and buffers) with it
-#   3) Start and stop the runtime within FastAPI's lifespan
-#######################################################################
 
 
 @asynccontextmanager
