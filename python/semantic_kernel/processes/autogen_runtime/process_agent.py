@@ -47,7 +47,7 @@ class ProcessAgent(StepAgent):
 
     def __init__(self, agent_id: str, kernel: "Kernel", factories: dict[str, Any], runtime: SingleThreadedAgentRuntime):
         """Initialize the ProcessAgent."""
-        super().__init__(agent_id, factories)
+        super().__init__(agent_id, kernel, factories)
         # Now store the runtime
         self._runtime = runtime
         self.kernel = kernel

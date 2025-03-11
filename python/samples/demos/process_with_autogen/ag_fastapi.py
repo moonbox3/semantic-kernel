@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
     runtime = SingleThreadedAgentRuntime()
 
     # Register the agent types with the runtime, injecting the factories you had for steps
-    await register_autogen_agents(runtime, process.factories)
+    await register_autogen_agents(runtime, kernel, process.factories)
 
     # Start background message processing
     runtime.start()
