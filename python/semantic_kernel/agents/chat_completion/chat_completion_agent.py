@@ -1,5 +1,6 @@
 # Copyright (c) Microsoft. All rights reserved.
 
+import asyncio
 import logging
 import sys
 from collections.abc import AsyncGenerator, AsyncIterable
@@ -10,7 +11,7 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override  # pragma: no cover
 
-from autogen_core import MessageContext, default_subscription, message_handler
+from autogen_core import MessageContext, TopicId, default_subscription, message_handler
 from pydantic import Field, model_validator
 
 from semantic_kernel.agents import Agent
@@ -51,6 +52,7 @@ class ChatCompletionAgent(Agent):
     )
     channel_type: ClassVar[type[AgentChannel] | None] = ChatHistoryChannel
     service: ChatCompletionClientBase | None = Field(default=None, exclude=True)
+    publish_topics: list[str] = Field(default_factory=list)
 
     def __init__(
         self,
@@ -65,6 +67,7 @@ class ChatCompletionAgent(Agent):
         plugins: list[KernelPlugin | object] | dict[str, KernelPlugin | object] | None = None,
         prompt_template_config: PromptTemplateConfig | None = None,
         service: ChatCompletionClientBase | None = None,
+        publish_topics: list[str] | None = None,
     ) -> None:
         """Initialize a new instance of ChatCompletionAgent.
 
@@ -124,6 +127,8 @@ class ChatCompletionAgent(Agent):
             if prompt_template_config.template is not None:
                 # Use the template from the prompt_template_config if it is provided
                 args["instructions"] = prompt_template_config.template
+        if publish_topics is not None:
+            args["publish_topics"] = publish_topics
         super().__init__(**args)
 
     @model_validator(mode="after")
@@ -140,11 +145,16 @@ class ChatCompletionAgent(Agent):
         return self
 
     @message_handler
-    async def _on_runtime_message(self, message: ChatHistory, ctx: MessageContext) -> None:
+    async def _on_runtime_message(self, message: ChatMessageContent, ctx: MessageContext) -> None:
         print(f"ChatCompletionAgent {self.name} received message: {message}")
-        response = await self.get_response(message)
+        chat_history = ChatHistory(messages=[message])
+        response = await self.get_response(chat_history)
         print(f"ChatCompletionAgent {self.name} response: {response}")
-        await self.publish_message(response, ctx.topic_id)
+
+        if self.publish_topics:
+            await asyncio.gather(*[
+                self.publish_message(response, TopicId(topic_id, self.id.key)) for topic_id in self.publish_topics
+            ])
 
     @trace_agent_get_response
     @override

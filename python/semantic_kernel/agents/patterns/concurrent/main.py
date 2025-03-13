@@ -9,7 +9,8 @@ from autogen_core import (
 
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
 from semantic_kernel.connectors.ai.open_ai.services.open_ai_chat_completion import OpenAIChatCompletion
-from semantic_kernel.contents.chat_history import ChatHistory
+from semantic_kernel.contents.chat_message_content import ChatMessageContent
+from semantic_kernel.contents.utils.author_role import AuthorRole
 
 
 async def main():
@@ -34,11 +35,10 @@ async def main():
         ),
     )
 
-    chat_history = ChatHistory()
-    chat_history.add_user_message("Why is the sky blue in one sentence?")
+    message = ChatMessageContent(AuthorRole.USER, content="Why is the sky blue in one sentence?")
 
     runtime.start()
-    await runtime.publish_message(chat_history, topic_id=DefaultTopicId())
+    await runtime.publish_message(message, topic_id=DefaultTopicId())
     await runtime.stop_when_idle()
 
 
