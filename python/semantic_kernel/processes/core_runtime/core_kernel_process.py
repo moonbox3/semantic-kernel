@@ -3,10 +3,8 @@
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from autogen_core import SingleThreadedAgentRuntime
-
 from semantic_kernel.exceptions.process_exceptions import ProcessInvalidConfigurationException
-from semantic_kernel.processes.autogen_runtime.autogen_kernel_process_context import AutoGenKernelProcessContext
+from semantic_kernel.processes.core_runtime.core_kernel_process_context import CoreKernelProcessContext
 from semantic_kernel.processes.kernel_process.kernel_process_event import KernelProcessEvent
 
 if TYPE_CHECKING:
@@ -14,12 +12,11 @@ if TYPE_CHECKING:
 
 
 async def start(
-    runtime: SingleThreadedAgentRuntime,
     process: "KernelProcess",
     initial_event: KernelProcessEvent | str | Enum,
     process_id: str | None = None,
     **kwargs: Any,
-) -> AutoGenKernelProcessContext:
+) -> CoreKernelProcessContext:
     """Start the kernel process with SingleThreadedAgentRuntime."""
     if process is None:
         raise ProcessInvalidConfigurationException("process cannot be None")
@@ -34,10 +31,10 @@ async def start(
     if isinstance(initial_event, str):
         initial_event = KernelProcessEvent(id=initial_event, data=kwargs.get("data"))
 
-    if process_id is not None:
+    if process_id is not None and process.state.id is None:
         process.state.id = process_id
 
-    # Create an AutoGen kernel process context
-    process_context = AutoGenKernelProcessContext(process, runtime)
+    # Create a Core kernel process context
+    process_context = CoreKernelProcessContext(process)
     await process_context.start_with_event(initial_event)
     return process_context

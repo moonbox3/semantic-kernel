@@ -2,7 +2,6 @@
 
 
 from semantic_kernel.kernel_pydantic import KernelBaseModel
-from semantic_kernel.processes.autogen_runtime.autogen_process_info import AutoGenProcessInfo
 from semantic_kernel.processes.kernel_process.kernel_process_event import KernelProcessEvent
 
 #
@@ -11,9 +10,9 @@ from semantic_kernel.processes.kernel_process.kernel_process_event import Kernel
 
 
 class InitializeStepMessage(KernelBaseModel):
-    """Tells a StepAgent to initialize itself with a AutoGenStepInfo payload in JSON form."""
+    """Tells a StepAgent to initialize itself with a CoreStepInfo payload in JSON form."""
 
-    step_info_json: str
+    step_info_str: str  # Represents a CoreStepInfo object in JSON format
     parent_process_id: str | None = None
 
 
@@ -32,28 +31,10 @@ class ProcessIncomingMessagesMessage(KernelBaseModel):
     pass
 
 
-class ToAutoGenStepInfoMessage(KernelBaseModel):
-    """Asks a StepAgent to return a `AutoGenStepInfo` describing the current state of this step."""
+class ToCoreStepInfoMessage(KernelBaseModel):
+    """Asks a CoreProcess to return a `CoreStepInfo` describing the current state of this step."""
 
     pass
-
-
-class CountPreparedMessages(KernelBaseModel):
-    """For debugging. StepAgent: how many messages do you have queued up?"""
-
-    pass
-
-
-#
-# ---- Process Agent messages ----
-#
-
-
-class InitializeProcessMessage(KernelBaseModel):
-    """Tells a ProcessAgent to initialize with a DaprProcessInfo plus optional parent ID."""
-
-    process_info: AutoGenProcessInfo
-    parent_process_id: str | None = None
 
 
 class StartProcessMessage(KernelBaseModel):
@@ -84,11 +65,6 @@ class GetProcessInfoMessage(KernelBaseModel):
     """Asks a ProcessAgent to return a dict describing the current process state."""
 
     pass
-
-
-#
-# ---- Shared step <-> process messages, if you want them ----
-#
 
 
 class EnqueueEvent(KernelBaseModel):

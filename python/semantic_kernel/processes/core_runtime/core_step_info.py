@@ -17,16 +17,16 @@ from semantic_kernel.utils.feature_stage_decorator import experimental
 
 
 @experimental
-class AutoGenStepInfo(KernelBaseModel):
-    """An AutoGen step info."""
+class CoreStepInfo(KernelBaseModel):
+    """A Core step info."""
 
-    type: Literal["AutoGenStepInfo"] = "AutoGenStepInfo"
+    type: Literal["CoreStepInfo"] = "CoreStepInfo"
     inner_step_python_type: str
     state: KernelProcessState | KernelProcessStepState
     edges: dict[str, list[KernelProcessEdge]] = Field(default_factory=dict)
 
     def to_kernel_process_step_info(self) -> KernelProcessStepInfo:
-        """Converts the AutoGen step info to a kernel process step info."""
+        """Converts the Core step info to a kernel process step info."""
         inner_step_type = self._get_class_from_string(self.inner_step_python_type)
         if inner_step_type is None:
             raise KernelException(
@@ -39,11 +39,11 @@ class AutoGenStepInfo(KernelBaseModel):
         )
 
     @classmethod
-    def from_kernel_step_info(cls, kernel_step_info: KernelProcessStepInfo) -> "AutoGenStepInfo":
-        """Creates an AutoGen step info from a kernel step info."""
+    def from_kernel_step_info(cls, kernel_step_info: KernelProcessStepInfo) -> "CoreStepInfo":
+        """Creates a Core step info from a kernel step info."""
         if kernel_step_info is None:
             raise KernelException("Kernel step info must be provided")
-        return AutoGenStepInfo(
+        return CoreStepInfo(
             inner_step_python_type=get_fully_qualified_name(kernel_step_info.inner_step_type),
             state=kernel_step_info.state,
             edges={key: list(value) for key, value in kernel_step_info.edges.items()},

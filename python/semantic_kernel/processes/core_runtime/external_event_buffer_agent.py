@@ -4,9 +4,12 @@ import logging
 from queue import Queue
 from typing import Any
 
-from autogen_core import BaseAgent, MessageContext
+from autogen_core import AgentId, BaseAgent, MessageContext
 
-from semantic_kernel.processes.autogen_runtime.messages import DequeueAllExternalEvents, EnqueueExternalEvent
+from semantic_kernel.processes.core_runtime.messages import (
+    DequeueAllMessages,
+    EnqueueMessage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -14,19 +17,19 @@ logger = logging.getLogger(__name__)
 class ExternalEventBufferAgent(BaseAgent):
     """Buffer agent for external events."""
 
-    def __init__(self, agent_id: str):
+    def __init__(self, agent_id: AgentId):
         """Initialize the ExternalEventBufferAgent."""
-        super().__init__(agent_id)
+        super().__init__(agent_id.key)
         self.queue: Queue[str] = Queue()
 
     async def on_message_impl(self, message: Any, context: MessageContext) -> Any:
         """On message implementation to handle incoming messages."""
-        if isinstance(message, EnqueueExternalEvent):
-            self.queue.put(message.event_json)
-            logger.info(f"[{self.id}] Enqueued external event: {message.event_json}")
+        if isinstance(message, EnqueueMessage):
+            self.queue.put(message.message_json)
+            logger.info(f"[{self.id}] Enqueued external event: {message.message_json}")
             return None
 
-        if isinstance(message, DequeueAllExternalEvents):
+        if isinstance(message, DequeueAllMessages):
             items = []
             while not self.queue.empty():
                 items.append(self.queue.get())

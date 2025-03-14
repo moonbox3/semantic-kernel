@@ -55,9 +55,7 @@ dependencies = [
 ### Optional dependencies
 [project.optional-dependencies]
 autogen = [
-    "autogen-agentchat >= 0.2, <0.4"
-]
-autogen_core = [
+    "autogen-agentchat >= 0.2, <0.4",
     "autogen_core ~= 0.4"
 ]
 azure = [
