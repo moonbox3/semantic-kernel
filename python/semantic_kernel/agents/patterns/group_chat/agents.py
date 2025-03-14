@@ -9,6 +9,7 @@ from pydantic import Field
 
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
 from semantic_kernel.agents.patterns.group_chat.message_types import GroupChatMessage, RequestToSpeak
+from semantic_kernel.agents.patterns.group_chat.utils import format_chat_history
 from semantic_kernel.connectors.ai.open_ai.services.open_ai_chat_completion import OpenAIChatCompletion
 from semantic_kernel.connectors.ai.open_ai.services.open_ai_text_to_image import OpenAITextToImage
 from semantic_kernel.contents.chat_history import ChatHistory
@@ -27,10 +28,22 @@ class BaseGroupChatAgent(ChatCompletionAgent):
 
     @message_handler
     async def _on_group_chat_message(self, message: GroupChatMessage, ctx: MessageContext) -> None:
+        self.chat_history.add_message(
+            ChatMessageContent(
+                role=AuthorRole.SYSTEM,
+                content=f"Transferred to {message.body.name}",
+            )
+        )
         self.chat_history.add_message(message.body)
 
     @message_handler
     async def _on_request_to_speak(self, message: RequestToSpeak, ctx: MessageContext) -> None:
+        self.chat_history.add_message(
+            ChatMessageContent(
+                role=AuthorRole.SYSTEM,
+                content=f"Transferred to {self.name}, adopt the persona immediately.",
+            )
+        )
         response = await self.get_response(self.chat_history)
         print("############################################")
         print(f"{self.name}:\n{response.content}")
@@ -91,7 +104,7 @@ class IllustratorAgent(BaseGroupChatAgent):
     def __init__(self):
         super().__init__(
             name="IllustratorAgent",
-            description="Illustrator for creating photo-realistic illustrations.",
+            description="An illustrator for creating images.",
             instructions=(
                 "You are an Illustrator. You use the generate_image tool to create images given user's requirement. "
                 "Make sure the images have consistent characters and style."
@@ -103,7 +116,7 @@ class IllustratorAgent(BaseGroupChatAgent):
     @staticmethod
     @override
     def description() -> str:
-        return "Illustrator for creating photo-realistic illustrations."
+        return "An illustrator for creating images."
 
     @override
     @message_handler
@@ -144,7 +157,11 @@ You are in a role play game. The following roles are available:
 {{$roles}}.
 Read the following conversation. Then select the next role from {{$participants}} to play. Only return the role.
 
+###
+
 {{$history}}
+
+###
 
 Read the above conversation. Then select the next role from {{$participants}} to play. Only return the name of the role.
 """
@@ -175,15 +192,14 @@ Read the above conversation. Then select the next role from {{$participants}} to
         await self.publish_message(RequestToSpeak(), DefaultTopicId(type=self.participant_topics[next_agent]))
 
     async def _select_next_agent(self):
-        user_message = ChatMessageContent(AuthorRole.USER, content="Please select the next role.")
         response = await self.get_response(
-            ChatHistory(messages=[user_message]),
+            ChatHistory(),
             KernelArguments(
                 roles="\n".join(
                     f"{role}: {description}" for role, description in self.participant_descriptions.items()
                 ),
                 participants=", ".join(self.participant_descriptions.keys()),
-                history=self.chat_history,
+                history=format_chat_history(self.chat_history),
             ),
         )
 

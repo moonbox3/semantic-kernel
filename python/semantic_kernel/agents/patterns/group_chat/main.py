@@ -64,6 +64,7 @@ async def main():
                 content=(
                     "Please write a short story about the gingerbread man with up to 3 photo-realistic illustrations."
                 ),
+                name="User",
             )
         ),
         topic_id=TopicId("GroupChatTopic", "default"),
