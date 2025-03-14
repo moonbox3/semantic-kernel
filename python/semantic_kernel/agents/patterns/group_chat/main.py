@@ -5,7 +5,13 @@ import asyncio
 
 from autogen_core import SingleThreadedAgentRuntime, TopicId, TypeSubscription
 
-from semantic_kernel.agents.patterns.group_chat.agents import EditorAgent, GroupChatManager, UserAgent, WriterAgent
+from semantic_kernel.agents.patterns.group_chat.agents import (
+    EditorAgent,
+    GroupChatManager,
+    IllustratorAgent,
+    UserAgent,
+    WriterAgent,
+)
 from semantic_kernel.agents.patterns.group_chat.message_types import GroupChatMessage
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
@@ -22,6 +28,10 @@ async def main():
     await runtime.add_subscription(TypeSubscription("EditorAgentTopic", "EditorAgent"))
     await runtime.add_subscription(TypeSubscription("GroupChatTopic", "EditorAgent"))
 
+    await IllustratorAgent.register(runtime, "IllustratorAgent", lambda: IllustratorAgent())
+    await runtime.add_subscription(TypeSubscription("IllustratorAgentTopic", "IllustratorAgent"))
+    await runtime.add_subscription(TypeSubscription("GroupChatTopic", "IllustratorAgent"))
+
     await UserAgent.register(runtime, "UserAgent", lambda: UserAgent())
     await runtime.add_subscription(TypeSubscription("UserAgentTopic", "UserAgent"))
     await runtime.add_subscription(TypeSubscription("GroupChatTopic", "UserAgent"))
@@ -33,11 +43,13 @@ async def main():
             participant_descriptions={
                 "WriterAgent": WriterAgent.description(),
                 "EditorAgent": EditorAgent.description(),
+                "IllustratorAgent": IllustratorAgent.description(),
                 "UserAgent": UserAgent.description(),
             },
             participant_topics={
                 "WriterAgent": "WriterAgentTopic",
                 "EditorAgent": "EditorAgentTopic",
+                "IllustratorAgent": "IllustratorAgentTopic",
                 "UserAgent": "UserAgentTopic",
             },
         ),
