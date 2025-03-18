@@ -5,6 +5,7 @@ from semantic_kernel.contents.image_content import ImageContent
 
 
 def format_chat_history(chat_history: ChatHistory) -> str:
+    """Format the chat history into a human-readable string."""
     messages: list[str] = []
 
     for message in chat_history.messages:

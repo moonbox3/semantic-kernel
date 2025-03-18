@@ -13,7 +13,10 @@ USER_TOPIC_TYPE = "User"
 
 
 class ConceptExtractorAgent(ChatCompletionAgent):
+    """Agent that extracts concepts from a product description."""
+
     def __init__(self):
+        """Initialize the agent."""
         super().__init__(
             name="ConceptExtractorAgent",
             description="ConceptExtractorAgent",
@@ -29,7 +32,10 @@ class ConceptExtractorAgent(ChatCompletionAgent):
 
 
 class WriterAgent(ChatCompletionAgent):
+    """Agent that writes a marketing copy based on extracted concepts."""
+
     def __init__(self):
+        """Initialize the agent."""
         super().__init__(
             name="WriterAgent",
             description="WriterAgent",
@@ -44,7 +50,10 @@ class WriterAgent(ChatCompletionAgent):
 
 
 class FormatProofAgent(ChatCompletionAgent):
+    """Agent that formats and proofreads the marketing copy."""
+
     def __init__(self):
+        """Initialize the agent."""
         super().__init__(
             name="WriterAgent",
             description="WriterAgent",
@@ -58,9 +67,12 @@ class FormatProofAgent(ChatCompletionAgent):
 
 
 class UserAgent(RoutedAgent):
+    """A user agent that outputs the final copy to the user."""
+
     def __init__(self) -> None:
+        """Initialize the agent."""
         super().__init__("A user agent that outputs the final copy to the user.")
 
     @message_handler
-    async def handle_final_copy(self, message: ChatMessageContent, ctx: MessageContext) -> None:
+    async def _handle_final_copy(self, message: ChatMessageContent, ctx: MessageContext) -> None:
         print(f"\n{'-' * 80}\n{self.id.type} received final copy:\n{message.content}")

@@ -2,10 +2,7 @@
 
 import asyncio
 
-from autogen_core import (
-    DefaultTopicId,
-    SingleThreadedAgentRuntime,
-)
+from autogen_core import DefaultTopicId, SingleThreadedAgentRuntime
 
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
 from semantic_kernel.connectors.ai.open_ai.services.open_ai_chat_completion import OpenAIChatCompletion
@@ -14,6 +11,7 @@ from semantic_kernel.contents.utils.author_role import AuthorRole
 
 
 async def main():
+    """Main function to run the agents."""
     runtime = SingleThreadedAgentRuntime()
 
     await ChatCompletionAgent.register(

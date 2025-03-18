@@ -20,6 +20,7 @@ from semantic_kernel.contents.utils.author_role import AuthorRole
 
 
 async def main():
+    """Main function to run the agents."""
     runtime = SingleThreadedAgentRuntime()
 
     await ConceptExtractorAgent.register(

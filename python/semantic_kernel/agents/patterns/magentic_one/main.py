@@ -1,26 +1,19 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-
 import asyncio
 
-from autogen_core import SingleThreadedAgentRuntime, TopicId, TypeSubscription
+from autogen_core import AgentId, SingleThreadedAgentRuntime, TypeSubscription
 
-from semantic_kernel.agents.patterns.group_chat.agents import (
-    EditorAgent,
-    GroupChatManager,
-    IllustratorAgent,
-    UserAgent,
-    WriterAgent,
-)
-from semantic_kernel.agents.patterns.group_chat.message_types import GroupChatMessage
-from semantic_kernel.contents.chat_message_content import ChatMessageContent
-from semantic_kernel.contents.utils.author_role import AuthorRole
+from semantic_kernel.agents.patterns.group_chat.agents import EditorAgent, IllustratorAgent, UserAgent, WriterAgent
+from semantic_kernel.agents.patterns.magentic_one.message_types import TaskStartMessage
+from semantic_kernel.agents.patterns.magentic_one.orchestrator import Orchestrator
 
 
 async def main():
     """Main function to run the agents."""
     runtime = SingleThreadedAgentRuntime()
 
+    # Temporarily reusing these agents for the Magentic One pattern
     await WriterAgent.register(runtime, "WriterAgent", lambda: WriterAgent())
     await runtime.add_subscription(TypeSubscription("WriterAgentTopic", "WriterAgent"))
     await runtime.add_subscription(TypeSubscription("GroupChatTopic", "WriterAgent"))
@@ -37,10 +30,10 @@ async def main():
     await runtime.add_subscription(TypeSubscription("UserAgentTopic", "UserAgent"))
     await runtime.add_subscription(TypeSubscription("GroupChatTopic", "UserAgent"))
 
-    await GroupChatManager.register(
+    await Orchestrator.register(
         runtime,
-        "GroupChatManager",
-        lambda: GroupChatManager(
+        "Orchestrator",
+        lambda: Orchestrator(
             participant_descriptions={
                 "WriterAgent": WriterAgent.description(),
                 "EditorAgent": EditorAgent.description(),
@@ -55,20 +48,12 @@ async def main():
             },
         ),
     )
-    await runtime.add_subscription(TypeSubscription("GroupChatTopic", "GroupChatManager"))
+    await runtime.add_subscription(TypeSubscription("GroupChatTopic", "Orchestrator"))
 
     runtime.start()
-    await runtime.publish_message(
-        GroupChatMessage(
-            body=ChatMessageContent(
-                AuthorRole.USER,
-                content=(
-                    "Please write a short story about the gingerbread man with up to 3 photo-realistic illustrations."
-                ),
-                name="User",
-            )
-        ),
-        topic_id=TopicId("GroupChatTopic", "default"),
+    await runtime.send_message(
+        TaskStartMessage(body="Provide a different proof for Fermat's Last Theorem"),
+        AgentId("Orchestrator", "default"),
     )
     await runtime.stop_when_idle()
 
