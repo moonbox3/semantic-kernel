@@ -85,14 +85,14 @@ class ConcurrentPattern(KernelBaseModel):
         await asyncio.gather(*[
             ConcurrentAgentContainer.register(
                 runtime,
-                f"{agent.name}_container",
+                cls.get_container_type(agent),
                 lambda: ConcurrentAgentContainer(agent),
             )
             for agent in agents
         ])
         await CollectionAgentContainer.register(
             runtime,
-            "collection_container",
+            "concurrent_collection_container",
             lambda: CollectionAgentContainer(),
         )
 
@@ -105,3 +105,8 @@ class ConcurrentPattern(KernelBaseModel):
         self.runtime.start()
         await self.runtime.publish_message(ConcurrentRequestType(body=message), topic_id=DefaultTopicId())
         await self.runtime.stop_when_idle()
+
+    @staticmethod
+    def get_container_type(agent: Agent) -> str:
+        """Get the container type for an agent."""
+        return f"{agent.name}_concurrent_container"

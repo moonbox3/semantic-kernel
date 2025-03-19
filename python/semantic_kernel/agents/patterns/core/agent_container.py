@@ -19,14 +19,15 @@ class AgentContainerBase(KernelBaseModel, RoutedAgent, ABC, metaclass=AgentConta
 
     agent: Agent | None = None
 
-    def __init__(self, agent: Agent | None = None, description: str | None = None):
+    def __init__(self, agent: Agent | None = None, description: str | None = None, **kwargs):
         """Initialize the agent container.
 
         Args:
             agent (Agent | None): An agent to be run in the container.
             description (str | None): A description of the agent container.
+            **kwargs: Additional keyword arguments.
         """
-        KernelBaseModel.__init__(self, agent=agent)
+        KernelBaseModel.__init__(self, agent=agent, **kwargs)
 
         if not agent and not description:
             raise ValueError("Either agent or description must be provided.")
