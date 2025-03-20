@@ -4,7 +4,9 @@ import logging
 from queue import Queue
 from typing import Any
 
-from autogen_core import AgentId, BaseAgent, MessageContext
+from agent_runtime import AgentId
+from agent_runtime.in_process.base_agent import BaseAgent
+from agent_runtime.in_process.message_context import MessageContext
 
 from semantic_kernel.processes.core_runtime.messages import DequeueAllMessages, EnqueueMessage
 

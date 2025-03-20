@@ -9,7 +9,8 @@ from collections.abc import MutableSequence
 from queue import Queue
 from typing import TYPE_CHECKING, Any
 
-from autogen_core import AgentId, MessageContext, SingleThreadedAgentRuntime
+from agent_runtime import AgentId, InProcessRuntime
+from agent_runtime.in_process.message_context import MessageContext
 
 from semantic_kernel.exceptions.process_exceptions import ProcessEventUndefinedException
 from semantic_kernel.processes.const import END_PROCESS_ID
@@ -48,9 +49,7 @@ logger = logging.getLogger(__name__)
 class CoreProcess(CoreStep):
     """A "Process" agent that inherits from StepAgent."""
 
-    def __init__(
-        self, agent_id: AgentId, kernel: "Kernel", factories: dict[str, Any], runtime: SingleThreadedAgentRuntime
-    ):
+    def __init__(self, agent_id: AgentId, kernel: "Kernel", factories: dict[str, Any], runtime: InProcessRuntime):
         """Initialize the ProcessAgent."""
         super().__init__(agent_id, kernel, factories, runtime)
         self._id = agent_id

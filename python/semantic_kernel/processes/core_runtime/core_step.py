@@ -8,7 +8,9 @@ from inspect import isawaitable
 from queue import Queue
 from typing import TYPE_CHECKING, Any
 
-from autogen_core import AgentId, BaseAgent, MessageContext
+from agent_runtime import AgentId
+from agent_runtime.in_process.base_agent import BaseAgent
+from agent_runtime.in_process.message_context import MessageContext
 
 from semantic_kernel.exceptions.kernel_exceptions import KernelException
 from semantic_kernel.exceptions.process_exceptions import (

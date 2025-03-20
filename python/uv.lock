@@ -43,6 +43,38 @@ wheels = [
 ]
 
 [[package]]
+name = "agent-runtime"
+source = { directory = "../../agent-runtime/python" }
+dependencies = [
+    { name = "opentelemetry-api", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "opentelemetry-sdk", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "protobuf", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "opentelemetry-api", specifier = ">=1.24" },
+    { name = "opentelemetry-sdk", specifier = ">=1.24" },
+    { name = "protobuf" },
+    { name = "pydantic", specifier = ">=2.0,!=2.10.0,!=2.10.1,!=2.10.2,!=2.10.3,<2.11" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.10" },
+    { name = "pre-commit", specifier = "~=3.7" },
+    { name = "pytest", specifier = "~=8.2" },
+    { name = "pytest-asyncio", specifier = "~=0.24" },
+    { name = "pytest-cov", specifier = ">=5.0" },
+    { name = "pytest-timeout", specifier = ">=2.3.1" },
+    { name = "pytest-xdist", extras = ["psutil"], specifier = "~=3.6" },
+    { name = "ruff", specifier = "~=0.9" },
+    { name = "snoop", specifier = "~=0.4" },
+    { name = "types-pyyaml", specifier = "~=6.0.12.20240311" },
+]
+
+[[package]]
 name = "aiohappyeyeballs"
 version = "2.4.8"
 source = { registry = "https://pypi.org/simple" }
@@ -5278,13 +5310,14 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+agent-runtime = [
+    { name = "agent-runtime", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+]
 anthropic = [
     { name = "anthropic", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 autogen = [
     { name = "autogen-agentchat", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-]
-autogen-core = [
     { name = "autogen-core", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 aws = [
@@ -5387,12 +5420,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "agent-runtime", marker = "extra == 'agent-runtime'", directory = "../../agent-runtime/python" },
     { name = "aiohttp", specifier = "~=3.8" },
     { name = "aiortc", specifier = ">=1.9.0" },
     { name = "aiortc", marker = "extra == 'realtime'", specifier = ">=1.9.0" },
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = "~=0.32" },
     { name = "autogen-agentchat", marker = "extra == 'autogen'", specifier = ">=0.2,<0.4" },
-    { name = "autogen-core", marker = "extra == 'autogen-core'", specifier = "~=0.4" },
+    { name = "autogen-core", marker = "extra == 'autogen'", specifier = "~=0.4" },
     { name = "azure-ai-inference", marker = "extra == 'azure'", specifier = ">=1.0.0b6" },
     { name = "azure-ai-projects", marker = "extra == 'azure'", specifier = ">=1.0.0b7" },
     { name = "azure-core-tracing-opentelemetry", marker = "extra == 'azure'", specifier = ">=1.0.0b11" },
@@ -5448,7 +5482,7 @@ requires-dist = [
     { name = "websockets", specifier = ">=13,<16" },
     { name = "websockets", marker = "extra == 'realtime'", specifier = ">=13,<16" },
 ]
-provides-extras = ["anthropic", "autogen", "autogen-core", "aws", "azure", "chroma", "dapr", "faiss", "google", "hugging-face", "milvus", "mistralai", "mongo", "notebooks", "ollama", "onnx", "pandas", "pinecone", "postgres", "qdrant", "realtime", "redis", "usearch", "weaviate"]
+provides-extras = ["agent-runtime", "anthropic", "autogen", "aws", "azure", "chroma", "dapr", "faiss", "google", "hugging-face", "milvus", "mistralai", "mongo", "notebooks", "ollama", "onnx", "pandas", "pinecone", "postgres", "qdrant", "realtime", "redis", "usearch", "weaviate"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -2,7 +2,7 @@
 
 import uuid
 
-from autogen_core import AgentId, SingleThreadedAgentRuntime
+from agent_runtime import AgentId, InProcessRuntime
 
 from semantic_kernel.kernel import Kernel
 from semantic_kernel.processes.core_runtime.core_process import CoreProcess
@@ -34,7 +34,7 @@ class CoreKernelProcessContext:
 
         self.process = process
         self.process_agent_id = AgentId("CoreProcess", process.state.id)
-        self.runtime = SingleThreadedAgentRuntime()
+        self.runtime = InProcessRuntime()
 
     async def start_with_event(self, initial_event: KernelProcessEvent) -> None:
         """Initialize the process with a message, then run once with the event."""
