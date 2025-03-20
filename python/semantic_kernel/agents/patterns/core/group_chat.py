@@ -92,9 +92,37 @@ class GroupChatManager(KernelBaseModel, ABC):
     """A group chat manager that manages the participants in a group chat."""
 
     @abstractmethod
+    async def should_terminate(self) -> bool:
+        """Check if the group chat should terminate."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def select_next_agent(self, participant_descriptions: dict[str, str]) -> str:
         """Select the next agent to speak."""
         raise NotImplementedError
+
+
+class RoundRobinGroupChatManager(GroupChatManager):
+    """A round-robin group chat manager."""
+
+    current_index: int = 0
+    current_round: int = 0
+    max_rounds: int | None = None
+
+    @override
+    async def should_terminate(self) -> bool:
+        """Check if the group chat should terminate."""
+        if self.max_rounds is not None:
+            return self.current_round > self.max_rounds
+        return False
+
+    @override
+    async def select_next_agent(self, participant_descriptions: dict[str, str]) -> str:
+        """Select the next agent to speak."""
+        next_agent = list(participant_descriptions.keys())[self.current_index]
+        self.current_index = (self.current_index + 1) % len(participant_descriptions)
+        self.current_round += 1
+        return next_agent
 
 
 class GroupChatManagerContainer(GroupChatAgentContainer):
@@ -125,9 +153,14 @@ class GroupChatManagerContainer(GroupChatAgentContainer):
     async def _on_group_chat_message(self, message: GroupChatResponseMessage, ctx: MessageContext) -> None:
         await super()._on_group_chat_message(message, ctx)
 
-        # TODO(@taochen): Termination condition.
+        should_terminate = await self.manager.should_terminate()
+        if should_terminate:
+            logger.debug("Group chat manager decided to terminate the group chat.")
+            return
 
         next_agent = self.manager.select_next_agent(self.participant_descriptions)
+        logger.debug(f"Group chat manager selected next agent: {next_agent}")
+
         await self.publish_message(
             GroupChatRequestMessage(),
             TopicId(self.manager.participant_topics[next_agent], self.id.key),
@@ -170,7 +203,11 @@ class GroupChatPattern(KernelBaseModel):
         await GroupChatManagerContainer.register(
             runtime,
             cls.MANAGER_TYPE,
-            lambda: GroupChatManagerContainer(manager=manager),
+            lambda: GroupChatManagerContainer(
+                manager=manager,
+                participant_descriptions={agent.name: agent.description for agent in agents},
+                participant_topics={agent.name: cls.get_container_topic(agent) for agent in agents},
+            ),
         )
         # Add subscriptions
         subscriptions: list[TypeSubscription] = []
