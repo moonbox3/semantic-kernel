@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Annotated
+from typing import Annotated, ClassVar
 
 from autogen_core import MessageContext, SingleThreadedAgentRuntime, TopicId, TypeSubscription, message_handler
 from pydantic import Field
@@ -17,7 +17,7 @@ from semantic_kernel.kernel_pydantic import KernelBaseModel
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-class SequentialRequestType(KernelBaseModel):
+class SequentialRequestMessage(KernelBaseModel):
     """A request message type for concurrent agents."""
 
     body: ChatMessageContent
@@ -33,7 +33,7 @@ class SequentialAgentContainer(AgentContainerBase):
         super().__init__(agent=agent, sequential_topic_type=sequential_topic_type)
 
     @message_handler
-    async def _handle_message(self, message: SequentialRequestType, ctx: MessageContext) -> None:
+    async def _handle_message(self, message: SequentialRequestMessage, ctx: MessageContext) -> None:
         """Handle a message."""
         logger.debug(
             f"Sequential container (Container ID: {self.id}; Agent name: {self.agent.name}) started processing..."
@@ -48,7 +48,7 @@ class SequentialAgentContainer(AgentContainerBase):
 
         if self.sequential_topic_type:
             await self.publish_message(
-                SequentialRequestType(body=response),
+                SequentialRequestMessage(body=response),
                 TopicId(self.sequential_topic_type, self.id.key),
             )
 
@@ -61,7 +61,7 @@ class CollectionAgentContainer(AgentContainerBase):
         super().__init__(description="A container to collect responses from the last agent in the sequence.")
 
     @message_handler
-    async def _handle_message(self, message: SequentialRequestType, ctx: MessageContext) -> None:
+    async def _handle_message(self, message: SequentialRequestMessage, ctx: MessageContext) -> None:
         print(f"From {ctx.sender}: {message.body.content}")
 
 
@@ -70,6 +70,9 @@ class SequentialPattern(KernelBaseModel):
 
     agents: list[Agent] = Field(default_factory=list)
     runtime: SingleThreadedAgentRuntime
+
+    COLLECTION_AGENT_TYPE: ClassVar[str] = "sequential_collection_container"
+    COLLECTION_AGENT_TOPIC: ClassVar[str] = "sequential_collection_container_topic"
 
     @classmethod
     async def create(
@@ -82,7 +85,7 @@ class SequentialPattern(KernelBaseModel):
         # Register all agents
         await CollectionAgentContainer.register(
             runtime,
-            "sequential_collection_container",
+            cls.COLLECTION_AGENT_TYPE,
             lambda: CollectionAgentContainer(),
         )
         await asyncio.gather(*[
@@ -93,7 +96,7 @@ class SequentialPattern(KernelBaseModel):
                     agent,
                     cls.get_container_topic(agents[index + 1])
                     if index + 1 < len(agents)
-                    else "sequential_collection_container_topic",
+                    else cls.COLLECTION_AGENT_TOPIC,
                 ),
             )
             for index, agent in enumerate(agents)
@@ -101,8 +104,8 @@ class SequentialPattern(KernelBaseModel):
         # Add subscriptions
         await runtime.add_subscription(
             TypeSubscription(
-                "sequential_collection_container_topic",
-                "sequential_collection_container",
+                cls.COLLECTION_AGENT_TOPIC,
+                cls.COLLECTION_AGENT_TYPE,
             )
         )
         await asyncio.gather(*[
@@ -118,12 +121,12 @@ class SequentialPattern(KernelBaseModel):
         return cls(agents=agents, runtime=runtime)
 
     async def start(self, task: str) -> None:
-        """Start the concurrent pattern."""
+        """Start the sequential pattern."""
         message = ChatMessageContent(AuthorRole.USER, content=task)
 
         self.runtime.start()
         await self.runtime.publish_message(
-            SequentialRequestType(body=message),
+            SequentialRequestMessage(body=message),
             TopicId(SequentialPattern.get_container_topic(self.agents[0]), "default"),
         )
         await self.runtime.stop_when_idle()

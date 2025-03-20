@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from typing import ClassVar
 
 from autogen_core import (
     DefaultTopicId,
@@ -22,13 +23,13 @@ from semantic_kernel.kernel_pydantic import KernelBaseModel
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-class ConcurrentRequestType(KernelBaseModel):
+class ConcurrentRequestMessage(KernelBaseModel):
     """A request message type for concurrent agents."""
 
     body: ChatMessageContent
 
 
-class ConcurrentResponseType(KernelBaseModel):
+class ConcurrentResponseMessage(KernelBaseModel):
     """A response message type for concurrent agents."""
 
     body: ChatMessageContent
@@ -39,7 +40,7 @@ class ConcurrentAgentContainer(AgentContainerBase):
     """A agent container for concurrent agents that process tasks."""
 
     @message_handler
-    async def _handle_message(self, message: ConcurrentRequestType, ctx: MessageContext) -> None:
+    async def _handle_message(self, message: ConcurrentRequestMessage, ctx: MessageContext) -> None:
         """Handle a message."""
         logger.debug(
             f"Concurrent container (Container ID: {self.id}; Agent name: {self.agent.name}) started processing..."
@@ -52,7 +53,7 @@ class ConcurrentAgentContainer(AgentContainerBase):
             f"Concurrent container (Container ID: {self.id}; Agent name: {self.agent.name}) finished processing."
         )
 
-        await self.publish_message(ConcurrentResponseType(body=response), ctx.topic_id)
+        await self.publish_message(ConcurrentResponseMessage(body=response), ctx.topic_id)
 
 
 @default_subscription
@@ -64,7 +65,7 @@ class CollectionAgentContainer(AgentContainerBase):
         super().__init__(description="A container to collect responses from concurrent agents.")
 
     @message_handler
-    async def _handle_message(self, message: ConcurrentResponseType, ctx: MessageContext) -> None:
+    async def _handle_message(self, message: ConcurrentResponseMessage, ctx: MessageContext) -> None:
         print(f"From {ctx.sender}: {message.body.content}")
 
 
@@ -73,6 +74,8 @@ class ConcurrentPattern(KernelBaseModel):
 
     agents: list[Agent] = Field(default_factory=list)
     runtime: SingleThreadedAgentRuntime
+
+    COLLECTION_AGENT_TYPE: ClassVar[str] = "concurrent_collection_container"
 
     @classmethod
     async def create(
@@ -92,7 +95,7 @@ class ConcurrentPattern(KernelBaseModel):
         ])
         await CollectionAgentContainer.register(
             runtime,
-            "concurrent_collection_container",
+            cls.COLLECTION_AGENT_TYPE,
             lambda: CollectionAgentContainer(),
         )
 
@@ -103,7 +106,7 @@ class ConcurrentPattern(KernelBaseModel):
         message = ChatMessageContent(AuthorRole.USER, content=task)
 
         self.runtime.start()
-        await self.runtime.publish_message(ConcurrentRequestType(body=message), topic_id=DefaultTopicId())
+        await self.runtime.publish_message(ConcurrentRequestMessage(body=message), topic_id=DefaultTopicId())
         await self.runtime.stop_when_idle()
 
     @staticmethod
