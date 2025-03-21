@@ -14,6 +14,8 @@ from semantic_kernel.agents.patterns.core.agent_container import AgentContainerB
 from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
+from semantic_kernel.functions.kernel_arguments import KernelArguments
+from semantic_kernel.kernel import Kernel
 from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 if sys.version_info >= (3, 12):
@@ -68,6 +70,9 @@ class GroupChatAgentContainer(AgentContainerBase):
     @message_handler
     async def _on_request_to_speak(self, message: GroupChatRequestMessage, ctx: MessageContext) -> None:
         """Handle a message."""
+        if not self.agent:
+            raise RuntimeError("Agent not set for the container. Please provide an agent or override this method.")
+
         logger.debug(
             f"Group chat container (Container ID: {self.id}; Agent name: {self.agent.name}) started processing..."
         )
@@ -76,10 +81,10 @@ class GroupChatAgentContainer(AgentContainerBase):
         self.chat_history.add_message(
             ChatMessageContent(
                 role=AuthorRole.SYSTEM,
-                content=f"Transferred to {self.name}, adopt the persona immediately.",
+                content=f"Transferred to {self.agent.name}, adopt the persona immediately.",
             )
         )
-        response = await self.get_response(self.chat_history)
+        response = await self.agent.get_response(self.chat_history)
 
         logger.debug(
             f"Group chat container (Container ID: {self.id}; Agent name: {self.agent.name}) finished processing."
@@ -89,16 +94,32 @@ class GroupChatAgentContainer(AgentContainerBase):
 
 
 class GroupChatManager(KernelBaseModel, ABC):
-    """A group chat manager that manages the participants in a group chat."""
+    """A group chat manager that manages the flow of a group chat."""
+
+    current_round: int = 0
+    max_rounds: int | None = None
 
     @abstractmethod
-    async def should_terminate(self) -> bool:
-        """Check if the group chat should terminate."""
+    async def should_terminate(self, chat_history: ChatHistory) -> bool:
+        """Check if the group chat should terminate.
+
+        Args:
+            chat_history (ChatHistory): The chat history of the group chat.
+        """
         raise NotImplementedError
 
     @abstractmethod
-    async def select_next_agent(self, participant_descriptions: dict[str, str]) -> str:
-        """Select the next agent to speak."""
+    async def select_next_agent(
+        self,
+        chat_history: ChatHistory,
+        participant_descriptions: dict[str, str],
+    ) -> str:
+        """Select the next agent to speak.
+
+        Args:
+            chat_history (ChatHistory): The chat history of the group chat.
+            participant_descriptions (dict[str, str]): The descriptions of the participants in the group chat.
+        """
         raise NotImplementedError
 
 
@@ -106,23 +127,115 @@ class RoundRobinGroupChatManager(GroupChatManager):
     """A round-robin group chat manager."""
 
     current_index: int = 0
-    current_round: int = 0
-    max_rounds: int | None = None
 
     @override
-    async def should_terminate(self) -> bool:
+    async def should_terminate(self, chat_history: ChatHistory) -> bool:
         """Check if the group chat should terminate."""
         if self.max_rounds is not None:
             return self.current_round > self.max_rounds
         return False
 
     @override
-    async def select_next_agent(self, participant_descriptions: dict[str, str]) -> str:
+    async def select_next_agent(
+        self,
+        chat_history: ChatHistory,
+        participant_descriptions: dict[str, str],
+    ) -> str:
         """Select the next agent to speak."""
         next_agent = list(participant_descriptions.keys())[self.current_index]
         self.current_index = (self.current_index + 1) % len(participant_descriptions)
         self.current_round += 1
         return next_agent
+
+
+class KernelFunctionGroupChatManager(GroupChatManager):
+    """A simple model-based group chat manager."""
+
+    kernel: Kernel
+
+    termination_prompt: str = Field(
+        default="""
+You are in a role play game. Read the following conversation. Then determine if the game should continue or terminate.
+
+###
+                                    
+{{$history}}                        
+
+###
+
+Read the above conversation. Then determine if the game should continue or terminate.
+Only return "CONTINUE" or "TERMINATE".
+"""
+    )
+    selection_prompt: str = Field(
+        default="""
+You are in a role play game. The following roles are available:
+{{$roles}}.
+Read the following conversation. Then select the next role from {{$participants}} to play. Only return the role.
+
+###
+
+{{$history}}
+
+###
+
+Read the above conversation. Then select the next role from {{$participants}} to play. Only return the name of the role.
+"""
+    )
+
+    @override
+    async def should_terminate(self, chat_history: ChatHistory) -> bool:
+        """Check if the group chat should terminate."""
+        if self.max_rounds is not None and self.current_round > self.max_rounds:
+            logger.debug("Group chat manager reached the maximum number of rounds.")
+            return True
+
+        self.current_round += 1
+
+        response = await self.kernel.invoke_prompt(
+            self.termination_prompt,
+            arguments=KernelArguments(history=chat_history.to_prompt()),
+        )
+        if response is None:
+            raise RuntimeError("No response received from the kernel.")
+        if (
+            not isinstance(response.value, list)
+            or len(response.value) < 1
+            or not isinstance(response.value[0], ChatMessageContent)
+        ):
+            raise RuntimeError("Invalid response received from the kernel.")
+
+        return "terminate" in response.value[0].content.lower()
+
+    @override
+    async def select_next_agent(
+        self,
+        chat_history: ChatHistory,
+        participant_descriptions: dict[str, str],
+    ) -> str:
+        """Select the next agent to speak."""
+        response = await self.kernel.invoke_prompt(
+            self.selection_prompt,
+            arguments=KernelArguments(
+                history=chat_history.to_prompt(),
+                roles=", ".join(participant_descriptions.values()),
+                participants=", ".join(participant_descriptions.keys()),
+            ),
+        )
+        if response is None:
+            raise RuntimeError("No response received from the kernel.")
+        if (
+            not isinstance(response.value, list)
+            or len(response.value) < 1
+            or not isinstance(response.value[0], ChatMessageContent)
+        ):
+            raise RuntimeError("Invalid response received from the kernel.")
+
+        for participant_name in participant_descriptions:
+            if participant_name.lower() in response.value[0].content.lower():
+                return participant_name
+
+        raise RuntimeError("No participant selected.")
 
 
 class GroupChatManagerContainer(GroupChatAgentContainer):
@@ -145,6 +258,7 @@ class GroupChatManagerContainer(GroupChatAgentContainer):
             manager=manager,
             participant_descriptions=participant_descriptions,
             participant_topics=participant_topics,
+            description="A container for the group chat manager.",
             **kwargs,
         )
 
@@ -153,17 +267,17 @@ class GroupChatManagerContainer(GroupChatAgentContainer):
     async def _on_group_chat_message(self, message: GroupChatResponseMessage, ctx: MessageContext) -> None:
         await super()._on_group_chat_message(message, ctx)
 
-        should_terminate = await self.manager.should_terminate()
+        should_terminate = await self.manager.should_terminate(self.chat_history)
         if should_terminate:
             logger.debug("Group chat manager decided to terminate the group chat.")
             return
 
-        next_agent = self.manager.select_next_agent(self.participant_descriptions)
+        next_agent = await self.manager.select_next_agent(self.chat_history, self.participant_descriptions)
         logger.debug(f"Group chat manager selected next agent: {next_agent}")
 
         await self.publish_message(
             GroupChatRequestMessage(),
-            TopicId(self.manager.participant_topics[next_agent], self.id.key),
+            TopicId(self.participant_topics[next_agent], self.id.key),
         )
 
     @override
