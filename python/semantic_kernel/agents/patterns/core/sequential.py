@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import sys
 from typing import Annotated, ClassVar
 
 from autogen_core import MessageContext, SingleThreadedAgentRuntime, TopicId, TypeSubscription, message_handler
@@ -9,10 +10,16 @@ from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent
 from semantic_kernel.agents.patterns.core.agent_container import AgentContainerBase
-from semantic_kernel.contents.chat_history import ChatHistory
+from semantic_kernel.agents.patterns.core.pattern_base import MultiAgentPatternBase
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from semantic_kernel.kernel_pydantic import KernelBaseModel
+
+if sys.version_info >= (3, 12):
+    from typing import override  # pragma: no cover
+else:
+    from typing_extensions import override  # pragma: no cover
+
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -39,8 +46,7 @@ class SequentialAgentContainer(AgentContainerBase):
             f"Sequential container (Container ID: {self.id}; Agent name: {self.agent.name}) started processing..."
         )
 
-        chat_history = ChatHistory(messages=[message.body])
-        response = await self.agent.get_response(chat_history)
+        response = await self.agent.get_response(messages=message.body)
 
         logger.debug(
             f"Sequential container (Container ID: {self.id}; Agent name: {self.agent.name}) finished processing."
@@ -48,7 +54,7 @@ class SequentialAgentContainer(AgentContainerBase):
 
         if self.sequential_topic_type:
             await self.publish_message(
-                SequentialRequestMessage(body=response),
+                SequentialRequestMessage(body=response.message),
                 TopicId(self.sequential_topic_type, self.id.key),
             )
 
@@ -65,78 +71,79 @@ class CollectionAgentContainer(AgentContainerBase):
         print(f"From {ctx.sender}: {message.body.content}")
 
 
-class SequentialPattern(KernelBaseModel):
+class SequentialPattern(MultiAgentPatternBase):
     """A sequential multi-agent pattern."""
 
     agents: list[Agent] = Field(default_factory=list)
-    runtime: SingleThreadedAgentRuntime
 
     COLLECTION_AGENT_TYPE: ClassVar[str] = "sequential_collection_container"
     COLLECTION_AGENT_TOPIC: ClassVar[str] = "sequential_collection_container_topic"
 
-    @classmethod
-    async def create(
-        cls, agents: list[Agent], runtime: SingleThreadedAgentRuntime | None = None
-    ) -> "SequentialPattern":
-        """Create a sequential pattern."""
-        if runtime is None:
-            runtime = SingleThreadedAgentRuntime()
+    @override
+    async def _start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
+        """Start the sequential pattern."""
+        message = ChatMessageContent(AuthorRole.USER, content=task)
 
-        # Register all agents
+        should_stop = True
+        try:
+            runtime.start()
+        except Exception:
+            should_stop = False
+            logger.warning("Runtime is already started outside of the pattern.")
+
+        await runtime.publish_message(
+            SequentialRequestMessage(body=message),
+            TopicId(self._get_container_topic(self.agents[0]), "default"),
+        )
+
+        if should_stop:
+            await runtime.stop_when_idle()
+
+    @override
+    async def _register_agents(self, runtime: SingleThreadedAgentRuntime) -> None:
+        """Register the agents."""
         await CollectionAgentContainer.register(
             runtime,
-            cls.COLLECTION_AGENT_TYPE,
+            self.COLLECTION_AGENT_TYPE,
             lambda: CollectionAgentContainer(),
         )
         await asyncio.gather(*[
             SequentialAgentContainer.register(
                 runtime,
-                cls.get_container_type(agent),
-                lambda: SequentialAgentContainer(
+                self._get_container_type(agent),
+                lambda agent=agent: SequentialAgentContainer(
                     agent,
-                    cls.get_container_topic(agents[index + 1])
-                    if index + 1 < len(agents)
-                    else cls.COLLECTION_AGENT_TOPIC,
+                    self._get_container_topic(self.agents[index + 1])
+                    if index + 1 < len(self.agents)
+                    else self.COLLECTION_AGENT_TOPIC,
                 ),
             )
-            for index, agent in enumerate(agents)
+            for index, agent in enumerate(self.agents)
         ])
-        # Add subscriptions
+
+    @override
+    async def _add_subscriptions(self, runtime: SingleThreadedAgentRuntime) -> None:
+        """Add subscriptions."""
         await runtime.add_subscription(
             TypeSubscription(
-                cls.COLLECTION_AGENT_TOPIC,
-                cls.COLLECTION_AGENT_TYPE,
+                self.COLLECTION_AGENT_TOPIC,
+                self.COLLECTION_AGENT_TYPE,
             )
         )
         await asyncio.gather(*[
             runtime.add_subscription(
                 TypeSubscription(
-                    cls.get_container_topic(agent),
-                    cls.get_container_type(agent),
+                    self._get_container_topic(agent),
+                    self._get_container_type(agent),
                 )
             )
-            for agent in agents
+            for agent in self.agents
         ])
 
-        return cls(agents=agents, runtime=runtime)
-
-    async def start(self, task: str) -> None:
-        """Start the sequential pattern."""
-        message = ChatMessageContent(AuthorRole.USER, content=task)
-
-        self.runtime.start()
-        await self.runtime.publish_message(
-            SequentialRequestMessage(body=message),
-            TopicId(SequentialPattern.get_container_topic(self.agents[0]), "default"),
-        )
-        await self.runtime.stop_when_idle()
-
-    @staticmethod
-    def get_container_type(agent: Agent) -> str:
+    def _get_container_type(self, agent: Agent) -> str:
         """Get the container type for an agent."""
         return f"{agent.name}_sequential_container"
 
-    @staticmethod
-    def get_container_topic(agent: Agent) -> str:
+    def _get_container_topic(self, agent: Agent) -> str:
         """Get the container topic type for an agent."""
         return f"{agent.name}_sequential_topic"

@@ -2,6 +2,8 @@
 
 import asyncio
 
+from autogen_core import SingleThreadedAgentRuntime
+
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
 from semantic_kernel.agents.patterns.core.sequential import SequentialPattern
 from semantic_kernel.connectors.ai.open_ai.services.open_ai_chat_completion import OpenAIChatCompletion
@@ -40,13 +42,16 @@ async def main():
         service=OpenAIChatCompletion(),
     )
 
-    sequential_pattern = await SequentialPattern.create([
-        concept_extractor_agent,
-        writer_agent,
-        format_proof_agent,
-    ])
+    sequential_pattern = SequentialPattern(
+        agents=[
+            concept_extractor_agent,
+            writer_agent,
+            format_proof_agent,
+        ]
+    )
     await sequential_pattern.start(
-        task="An eco-friendly stainless steel water bottle that keeps drinks cold for 24 hours"
+        task="An eco-friendly stainless steel water bottle that keeps drinks cold for 24 hours",
+        runtime=SingleThreadedAgentRuntime(),
     )
 
 

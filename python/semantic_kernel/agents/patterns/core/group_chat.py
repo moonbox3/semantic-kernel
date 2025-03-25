@@ -11,6 +11,7 @@ from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent
 from semantic_kernel.agents.patterns.core.agent_container import AgentContainerBase
+from semantic_kernel.agents.patterns.core.pattern_base import MultiAgentPatternBase
 from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
@@ -84,13 +85,18 @@ class GroupChatAgentContainer(AgentContainerBase):
                 content=f"Transferred to {self.agent.name}, adopt the persona immediately.",
             )
         )
-        response = await self.agent.get_response(self.chat_history)
+        response = await self.agent.get_response(messages=self.chat_history.messages)
+        self.chat_history.add_message(response.message)
 
         logger.debug(
             f"Group chat container (Container ID: {self.id}; Agent name: {self.agent.name}) finished processing."
         )
+        print(f"{self.agent.name}: {response.content}")
 
-        await self.publish_message(GroupChatResponseMessage(body=response), TopicId(GROUP_CHAT_TOPIC, self.id.key))
+        await self.publish_message(
+            GroupChatResponseMessage(body=response.message),
+            TopicId(GROUP_CHAT_TOPIC, self.id.key),
+        )
 
 
 class GroupChatManager(KernelBaseModel, ABC):
@@ -186,7 +192,7 @@ Read the above conversation. Then select the next role from {{$participants}} to
     @override
     async def should_terminate(self, chat_history: ChatHistory) -> bool:
         """Check if the group chat should terminate."""
-        if self.max_rounds is not None and self.current_round > self.max_rounds:
+        if self.max_rounds is not None and self.current_round >= self.max_rounds:
             logger.debug("Group chat manager reached the maximum number of rounds.")
             return True
 
@@ -273,7 +279,7 @@ class GroupChatManagerContainer(GroupChatAgentContainer):
             return
 
         next_agent = await self.manager.select_next_agent(self.chat_history, self.participant_descriptions)
-        logger.debug(f"Group chat manager selected next agent: {next_agent}")
+        logger.debug(f"Group chat manager selected agent: {next_agent} on round {self.manager.current_round}.")
 
         await self.publish_message(
             GroupChatRequestMessage(),
@@ -286,70 +292,69 @@ class GroupChatManagerContainer(GroupChatAgentContainer):
         raise RuntimeError("Group chat manager should not receive request to speak messages.")
 
 
-class GroupChatPattern(KernelBaseModel):
+class GroupChatPattern(MultiAgentPatternBase):
     """A group chat multi-agent pattern."""
 
     agents: list[Agent] = Field(default_factory=list)
-    runtime: SingleThreadedAgentRuntime
+    manager: GroupChatManager
 
     MANAGER_TYPE: ClassVar[str] = "group_chat_manager_container"
 
-    @classmethod
-    async def create(
-        cls,
-        manager: GroupChatManager,
-        agents: list[Agent],
-        runtime: SingleThreadedAgentRuntime | None = None,
-    ) -> "GroupChatPattern":
-        """Create a group chat pattern."""
-        if runtime is None:
-            runtime = SingleThreadedAgentRuntime()
-
-        # Register all agents
-        await asyncio.gather(*[
-            GroupChatAgentContainer.register(
-                runtime,
-                cls.get_container_type(agent),
-                lambda: GroupChatAgentContainer(agent),
-            )
-            for agent in agents
-        ])
-        await GroupChatManagerContainer.register(
-            runtime,
-            cls.MANAGER_TYPE,
-            lambda: GroupChatManagerContainer(
-                manager=manager,
-                participant_descriptions={agent.name: agent.description for agent in agents},
-                participant_topics={agent.name: cls.get_container_topic(agent) for agent in agents},
-            ),
-        )
-        # Add subscriptions
-        subscriptions: list[TypeSubscription] = []
-        for agent in agents:
-            subscriptions.append(TypeSubscription(GROUP_CHAT_TOPIC, cls.get_container_type(agent)))
-            subscriptions.append(TypeSubscription(cls.get_container_topic(agent), cls.get_container_type(agent)))
-        await asyncio.gather(*[runtime.add_subscription(sub) for sub in subscriptions])
-        await runtime.add_subscription(TypeSubscription(GROUP_CHAT_TOPIC, cls.MANAGER_TYPE))
-
-        return cls(agents=agents, runtime=runtime)
-
-    async def start(self, task: str) -> None:
+    @override
+    async def _start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
         """Start the group chat pattern."""
-        message = ChatMessageContent(AuthorRole.USER, content=task)
+        message = ChatMessageContent(AuthorRole.USER, content=task, name="User")
 
-        self.runtime.start()
-        await self.runtime.publish_message(
+        should_stop = True
+        try:
+            runtime.start()
+        except Exception:
+            should_stop = False
+            logger.warning("Runtime is already started outside of the pattern.")
+
+        await runtime.publish_message(
             GroupChatResponseMessage(body=message),
             TopicId(GROUP_CHAT_TOPIC, "default"),
         )
-        await self.runtime.stop_when_idle()
 
-    @staticmethod
-    def get_container_type(agent: Agent) -> str:
+        if should_stop:
+            await runtime.stop_when_idle()
+
+    @override
+    async def _register_agents(self, runtime: SingleThreadedAgentRuntime) -> None:
+        """Register the agents."""
+        await asyncio.gather(*[
+            GroupChatAgentContainer.register(
+                runtime,
+                self._get_container_type(agent),
+                lambda agent=agent: GroupChatAgentContainer(agent, description=agent.description),
+            )
+            for agent in self.agents
+        ])
+        await GroupChatManagerContainer.register(
+            runtime,
+            self.MANAGER_TYPE,
+            lambda: GroupChatManagerContainer(
+                manager=self.manager,
+                participant_descriptions={agent.name: agent.description for agent in self.agents},
+                participant_topics={agent.name: self._get_container_topic(agent) for agent in self.agents},
+            ),
+        )
+
+    @override
+    async def _add_subscriptions(self, runtime: SingleThreadedAgentRuntime) -> None:
+        """Add subscriptions."""
+        subscriptions: list[TypeSubscription] = []
+        for agent in self.agents:
+            subscriptions.append(TypeSubscription(GROUP_CHAT_TOPIC, self._get_container_type(agent)))
+            subscriptions.append(TypeSubscription(self._get_container_topic(agent), self._get_container_type(agent)))
+        await asyncio.gather(*[runtime.add_subscription(sub) for sub in subscriptions])
+        await runtime.add_subscription(TypeSubscription(GROUP_CHAT_TOPIC, self.MANAGER_TYPE))
+
+    def _get_container_type(self, agent: Agent) -> str:
         """Get the container type for an agent."""
         return f"{agent.name}_group_chat_container"
 
-    @staticmethod
-    def get_container_topic(agent: Agent) -> str:
+    def _get_container_topic(self, agent: Agent) -> str:
         """Get the container topic type for an agent."""
         return f"{agent.name}_group_chat_topic"
