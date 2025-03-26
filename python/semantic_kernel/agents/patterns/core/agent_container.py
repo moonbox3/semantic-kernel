@@ -3,8 +3,9 @@
 from abc import ABC
 
 from autogen_core import RoutedAgent
+from pydantic import Field
 
-from semantic_kernel.agents.agent import Agent, AgentThread
+from semantic_kernel.agents.agent import Agent
 from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 
@@ -15,8 +16,10 @@ class AgentContainerBaseMetaClass(type(KernelBaseModel), type(RoutedAgent)):
 class AgentContainerBase(KernelBaseModel, RoutedAgent, ABC, metaclass=AgentContainerBaseMetaClass):
     """A base agent container for multi-agent pattern running on Agent runtime."""
 
-    agent: Agent | None = None
-    agent_thread: AgentThread | None = None
+    agent: Agent | None = Field(default=None, description="An agent to be run in the container.")
+    shared_topic_type: str = Field(
+        description="The unique topic of the pattern that the container is participating in."
+    )
 
     def __init__(self, agent: Agent | None = None, description: str | None = None, **kwargs):
         """Initialize the agent container.

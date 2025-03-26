@@ -27,9 +27,6 @@ else:
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# This topic is the shared topic for all agents in the group chat.
-GROUP_CHAT_TOPIC = "GroupChatTopic"
-
 
 class GroupChatRequestMessage(KernelBaseModel):
     """A request message type for agents in a group chat."""
@@ -52,7 +49,7 @@ class GroupChatResetMessage(KernelBaseModel):
 class GroupChatAgentContainer(AgentContainerBase):
     """A agent container for agents that process messages in a group chat."""
 
-    chat_history: ChatHistory = Field(default_factory=ChatHistory)
+    chat_history: ChatHistory = Field(default_factory=ChatHistory, description="The chat history of the agent.")
 
     @message_handler
     async def _on_group_chat_reset(self, message: GroupChatResetMessage, ctx: MessageContext) -> None:
@@ -91,11 +88,10 @@ class GroupChatAgentContainer(AgentContainerBase):
         logger.debug(
             f"Group chat container (Container ID: {self.id}; Agent name: {self.agent.name}) finished processing."
         )
-        print(f"{self.agent.name}: {response.content}")
 
         await self.publish_message(
             GroupChatResponseMessage(body=response.message),
-            TopicId(GROUP_CHAT_TOPIC, self.id.key),
+            TopicId(self.shared_topic_type, self.id.key),
         )
 
 
@@ -241,7 +237,7 @@ Read the above conversation. Then select the next role from {{$participants}} to
             if participant_name.lower() in response.value[0].content.lower():
                 return participant_name
 
-        raise RuntimeError("No participant selected.")
+        raise RuntimeError(f"Unknown participant selected: {response.value[0].content}.")
 
 
 class GroupChatManagerContainer(GroupChatAgentContainer):
@@ -314,7 +310,7 @@ class GroupChatPattern(MultiAgentPatternBase):
 
         await runtime.publish_message(
             GroupChatResponseMessage(body=message),
-            TopicId(GROUP_CHAT_TOPIC, "default"),
+            TopicId(self.shared_topic_type, "default"),
         )
 
         if should_stop:
@@ -327,7 +323,11 @@ class GroupChatPattern(MultiAgentPatternBase):
             GroupChatAgentContainer.register(
                 runtime,
                 self._get_container_type(agent),
-                lambda agent=agent: GroupChatAgentContainer(agent, description=agent.description),
+                lambda agent=agent: GroupChatAgentContainer(
+                    agent,
+                    description=agent.description,
+                    shared_topic_type=self.shared_topic_type,
+                ),
             )
             for agent in self.agents
         ])
@@ -338,6 +338,7 @@ class GroupChatPattern(MultiAgentPatternBase):
                 manager=self.manager,
                 participant_descriptions={agent.name: agent.description for agent in self.agents},
                 participant_topics={agent.name: self._get_container_topic(agent) for agent in self.agents},
+                shared_topic_type=self.shared_topic_type,
             ),
         )
 
@@ -346,10 +347,10 @@ class GroupChatPattern(MultiAgentPatternBase):
         """Add subscriptions."""
         subscriptions: list[TypeSubscription] = []
         for agent in self.agents:
-            subscriptions.append(TypeSubscription(GROUP_CHAT_TOPIC, self._get_container_type(agent)))
+            subscriptions.append(TypeSubscription(self.shared_topic_type, self._get_container_type(agent)))
             subscriptions.append(TypeSubscription(self._get_container_topic(agent), self._get_container_type(agent)))
         await asyncio.gather(*[runtime.add_subscription(sub) for sub in subscriptions])
-        await runtime.add_subscription(TypeSubscription(GROUP_CHAT_TOPIC, self.MANAGER_TYPE))
+        await runtime.add_subscription(TypeSubscription(self.shared_topic_type, self.MANAGER_TYPE))
 
     def _get_container_type(self, agent: Agent) -> str:
         """Get the container type for an agent."""
@@ -357,4 +358,4 @@ class GroupChatPattern(MultiAgentPatternBase):
 
     def _get_container_topic(self, agent: Agent) -> str:
         """Get the container topic type for an agent."""
-        return f"{agent.name}_group_chat_topic"
+        return f"{agent.name}_group_chat_{self.shared_topic_type}"

@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import sys
-from typing import Annotated, ClassVar
+from typing import ClassVar
 
 from autogen_core import MessageContext, SingleThreadedAgentRuntime, TopicId, TypeSubscription, message_handler
 from pydantic import Field
@@ -33,11 +33,9 @@ class SequentialRequestMessage(KernelBaseModel):
 class SequentialAgentContainer(AgentContainerBase):
     """A agent container for sequential agents that process tasks."""
 
-    sequential_topic_type: Annotated[str | None, "The topic of the next agent in the sequence."]
-
-    def __init__(self, agent: Agent, sequential_topic_type: str | None) -> None:
+    def __init__(self, agent: Agent, **kwargs) -> None:
         """Initialize the agent container."""
-        super().__init__(agent=agent, sequential_topic_type=sequential_topic_type)
+        super().__init__(agent=agent, **kwargs)
 
     @message_handler
     async def _handle_message(self, message: SequentialRequestMessage, ctx: MessageContext) -> None:
@@ -52,19 +50,18 @@ class SequentialAgentContainer(AgentContainerBase):
             f"Sequential container (Container ID: {self.id}; Agent name: {self.agent.name}) finished processing."
         )
 
-        if self.sequential_topic_type:
-            await self.publish_message(
-                SequentialRequestMessage(body=response.message),
-                TopicId(self.sequential_topic_type, self.id.key),
-            )
+        await self.publish_message(
+            SequentialRequestMessage(body=response.message),
+            TopicId(self.shared_topic_type, self.id.key),
+        )
 
 
 class CollectionAgentContainer(AgentContainerBase):
     """A agent container for collection results from the last agent in the sequence."""
 
-    def __init__(self):
+    def __init__(self, **kwargs) -> None:
         """Initialize the collection agent container."""
-        super().__init__(description="A container to collect responses from the last agent in the sequence.")
+        super().__init__(description="A container to collect responses from the last agent in the sequence.", **kwargs)
 
     @message_handler
     async def _handle_message(self, message: SequentialRequestMessage, ctx: MessageContext) -> None:
@@ -77,7 +74,7 @@ class SequentialPattern(MultiAgentPatternBase):
     agents: list[Agent] = Field(default_factory=list)
 
     COLLECTION_AGENT_TYPE: ClassVar[str] = "sequential_collection_container"
-    COLLECTION_AGENT_TOPIC: ClassVar[str] = "sequential_collection_container_topic"
+    COLLECTION_AGENT_TOPIC_PREFIX: ClassVar[str] = "sequential_collection_container_topic"
 
     @override
     async def _start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
@@ -105,17 +102,19 @@ class SequentialPattern(MultiAgentPatternBase):
         await CollectionAgentContainer.register(
             runtime,
             self.COLLECTION_AGENT_TYPE,
-            lambda: CollectionAgentContainer(),
+            lambda: CollectionAgentContainer(
+                shared_topic_type=self._get_collection_agent_topic(),
+            ),
         )
         await asyncio.gather(*[
             SequentialAgentContainer.register(
                 runtime,
                 self._get_container_type(agent),
-                lambda agent=agent: SequentialAgentContainer(
+                lambda agent=agent, index=index: SequentialAgentContainer(
                     agent,
-                    self._get_container_topic(self.agents[index + 1])
+                    shared_topic_type=self._get_container_topic(self.agents[index + 1])
                     if index + 1 < len(self.agents)
-                    else self.COLLECTION_AGENT_TOPIC,
+                    else self._get_collection_agent_topic(),
                 ),
             )
             for index, agent in enumerate(self.agents)
@@ -126,7 +125,7 @@ class SequentialPattern(MultiAgentPatternBase):
         """Add subscriptions."""
         await runtime.add_subscription(
             TypeSubscription(
-                self.COLLECTION_AGENT_TOPIC,
+                self._get_collection_agent_topic(),
                 self.COLLECTION_AGENT_TYPE,
             )
         )
@@ -146,4 +145,8 @@ class SequentialPattern(MultiAgentPatternBase):
 
     def _get_container_topic(self, agent: Agent) -> str:
         """Get the container topic type for an agent."""
-        return f"{agent.name}_sequential_topic"
+        return f"{agent.name}_sequential_topic_{self.shared_topic_type}"
+
+    def _get_collection_agent_topic(self) -> str:
+        """Get the collection agent topic."""
+        return f"{self.COLLECTION_AGENT_TOPIC_PREFIX}_{self.shared_topic_type}"

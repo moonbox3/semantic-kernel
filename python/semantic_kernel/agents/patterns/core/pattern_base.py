@@ -1,14 +1,21 @@
 # Copyright (c) Microsoft. All rights reserved.
 
+import uuid
 from abc import ABC, abstractmethod
 
 from autogen_core import SingleThreadedAgentRuntime
+from pydantic import Field
 
 from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 
 class MultiAgentPatternBase(KernelBaseModel, ABC):
     """Base class for multi-agent patterns."""
+
+    shared_topic_type: str = Field(
+        default_factory=lambda: uuid.uuid4().hex,
+        description="The shared topic of the pattern. It needs to be unique for each pattern instance.",
+    )
 
     async def start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
         """Start the multi-agent pattern."""

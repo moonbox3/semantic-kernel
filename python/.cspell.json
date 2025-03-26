@@ -46,6 +46,7 @@
         "kernelfunction",
         "logit",
         "logprobs",
+        "Magentic",
         "mistralai",
         "mongocluster",
         "nd",

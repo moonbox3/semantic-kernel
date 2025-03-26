@@ -5,13 +5,7 @@ import logging
 import sys
 from typing import ClassVar
 
-from autogen_core import (
-    DefaultTopicId,
-    MessageContext,
-    SingleThreadedAgentRuntime,
-    default_subscription,
-    message_handler,
-)
+from autogen_core import MessageContext, SingleThreadedAgentRuntime, TopicId, TypeSubscription, message_handler
 from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent
@@ -41,7 +35,6 @@ class ConcurrentResponseMessage(KernelBaseModel):
     body: ChatMessageContent
 
 
-@default_subscription
 class ConcurrentAgentContainer(AgentContainerBase):
     """A agent container for concurrent agents that process tasks."""
 
@@ -61,13 +54,12 @@ class ConcurrentAgentContainer(AgentContainerBase):
         await self.publish_message(ConcurrentResponseMessage(body=response.message), ctx.topic_id)
 
 
-@default_subscription
 class CollectionAgentContainer(AgentContainerBase):
     """A agent container for collection results from concurrent agents."""
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         """Initialize the collection agent container."""
-        super().__init__(description="A container to collect responses from concurrent agents.")
+        super().__init__(description="A container to collect responses from concurrent agents.", **kwargs)
 
     @message_handler
     async def _handle_message(self, message: ConcurrentResponseMessage, ctx: MessageContext) -> None:
@@ -93,7 +85,10 @@ class ConcurrentPattern(MultiAgentPatternBase):
             should_stop = False
             logger.warning("Runtime is already started outside of the pattern.")
 
-        await runtime.publish_message(ConcurrentRequestMessage(body=message), topic_id=DefaultTopicId())
+        await runtime.publish_message(
+            ConcurrentRequestMessage(body=message),
+            topic_id=TopicId(self.shared_topic_type, "default"),
+        )
 
         if should_stop:
             await runtime.stop_when_idle()
@@ -105,20 +100,34 @@ class ConcurrentPattern(MultiAgentPatternBase):
             ConcurrentAgentContainer.register(
                 runtime,
                 self._get_container_type(agent),
-                lambda agent=agent: ConcurrentAgentContainer(agent),
+                lambda agent=agent: ConcurrentAgentContainer(agent, shared_topic_type=self.shared_topic_type),
             )
             for agent in self.agents
         ])
         await CollectionAgentContainer.register(
             runtime,
             self.COLLECTION_AGENT_TYPE,
-            lambda: CollectionAgentContainer(),
+            lambda: CollectionAgentContainer(shared_topic_type=self.shared_topic_type),
         )
 
     @override
     async def _add_subscriptions(self, runtime: SingleThreadedAgentRuntime) -> None:
         """Add subscriptions."""
-        pass
+        await runtime.add_subscription(
+            TypeSubscription(
+                self.shared_topic_type,
+                self.COLLECTION_AGENT_TYPE,
+            )
+        )
+        await asyncio.gather(*[
+            runtime.add_subscription(
+                TypeSubscription(
+                    self.shared_topic_type,
+                    self._get_container_type(agent),
+                )
+            )
+            for agent in self.agents
+        ])
 
     def _get_container_type(self, agent: Agent) -> str:
         """Get the container type for an agent."""
