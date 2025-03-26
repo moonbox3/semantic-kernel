@@ -10,14 +10,14 @@ from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
-from semantic_kernel.agents.patterns.group_chat import (
+from semantic_kernel.agents.orchestration.agent_orchestration_base import AgentOrchestrationBase
+from semantic_kernel.agents.orchestration.group_chat import (
     GroupChatAgentContainer,
     GroupChatRequestMessage,
     GroupChatResetMessage,
     GroupChatResponseMessage,
 )
-from semantic_kernel.agents.patterns.pattern_base import MultiAgentPatternBase
-from semantic_kernel.agents.patterns.prompts._magentic_one_prompts import (
+from semantic_kernel.agents.orchestration.prompts._magentic_one_prompts import (
     ORCHESTRATOR_FINAL_ANSWER_PROMPT,
     ORCHESTRATOR_PROGRESS_LEDGER_PROMPT,
     ORCHESTRATOR_TASK_LEDGER_FACTS_PROMPT,
@@ -314,8 +314,8 @@ class MagenticOneManager(GroupChatAgentContainer):
         print(response.content)
 
 
-class MagenticOnePattern(MultiAgentPatternBase):
-    """The Magentic One pattern."""
+class MagenticOneOrchestration(AgentOrchestrationBase):
+    """The Magentic One pattern orchestration."""
 
     agents: list[Agent] = Field(default_factory=list)
     manager_service: ChatCompletionClientBase | None = None
@@ -325,7 +325,7 @@ class MagenticOnePattern(MultiAgentPatternBase):
 
     @override
     async def _start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
-        """Start the group chat pattern."""
+        """Start the Magentic One pattern."""
         should_stop = True
         try:
             runtime.start()

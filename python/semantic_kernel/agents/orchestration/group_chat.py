@@ -10,8 +10,8 @@ from autogen_core import MessageContext, SingleThreadedAgentRuntime, TopicId, Ty
 from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent, AgentThread
-from semantic_kernel.agents.patterns.agent_container import AgentContainerBase
-from semantic_kernel.agents.patterns.pattern_base import MultiAgentPatternBase
+from semantic_kernel.agents.orchestration.agent_container import AgentContainerBase
+from semantic_kernel.agents.orchestration.agent_orchestration_base import AgentOrchestrationBase
 from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
@@ -298,8 +298,8 @@ class GroupChatManagerContainer(GroupChatAgentContainer):
         raise RuntimeError("Group chat manager should not receive request to speak messages.")
 
 
-class GroupChatPattern(MultiAgentPatternBase):
-    """A group chat multi-agent pattern."""
+class GroupChatOrchestration(AgentOrchestrationBase):
+    """A group chat multi-agent pattern orchestration."""
 
     agents: list[Agent] = Field(default_factory=list)
     manager: GroupChatManager

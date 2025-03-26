@@ -14,11 +14,11 @@ class AgentContainerBaseMetaClass(type(KernelBaseModel), type(RoutedAgent)):
 
 
 class AgentContainerBase(KernelBaseModel, RoutedAgent, ABC, metaclass=AgentContainerBaseMetaClass):
-    """A base agent container for multi-agent pattern running on Agent runtime."""
+    """A base agent container for multi-agent orchestration running on Agent runtime."""
 
     agent: Agent | None = Field(default=None, description="An agent to be run in the container.")
     shared_topic_type: str = Field(
-        description="The unique topic of the pattern that the container is participating in."
+        description="The unique topic of the orchestration pattern that the container is participating in."
     )
 
     def __init__(self, agent: Agent | None = None, description: str | None = None, **kwargs):

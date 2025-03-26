@@ -6,11 +6,11 @@ import logging
 from autogen_core import SingleThreadedAgentRuntime
 
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
-from semantic_kernel.agents.patterns.concurrent import ConcurrentPattern
+from semantic_kernel.agents.orchestration.concurrent import ConcurrentOrchestration
 from semantic_kernel.connectors.ai.open_ai.services.open_ai_chat_completion import OpenAIChatCompletion
 
 logging.basicConfig(level=logging.WARNING)  # Set default level to WARNING
-logging.getLogger("semantic_kernel.agents.patterns.concurrent").setLevel(
+logging.getLogger("semantic_kernel.agents.orchestration.concurrent").setLevel(
     logging.DEBUG
 )  # Enable DEBUG for concurrent pattern
 
@@ -30,7 +30,7 @@ async def main():
         service=OpenAIChatCompletion(),
     )
 
-    concurrent_pattern = ConcurrentPattern(agents=[physics_agent, chemistry_agent])
+    concurrent_pattern = ConcurrentOrchestration(agents=[physics_agent, chemistry_agent])
     await concurrent_pattern.start(task="Why is the sky blue in one sentence?", runtime=SingleThreadedAgentRuntime())
 
 

@@ -9,8 +9,8 @@ from pydantic import Field
 from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 
-class MultiAgentPatternBase(KernelBaseModel, ABC):
-    """Base class for multi-agent patterns."""
+class AgentOrchestrationBase(KernelBaseModel, ABC):
+    """Base class for multi-agent orchestration."""
 
     shared_topic_type: str = Field(
         default_factory=lambda: uuid.uuid4().hex,
@@ -18,14 +18,14 @@ class MultiAgentPatternBase(KernelBaseModel, ABC):
     )
 
     async def start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
-        """Start the multi-agent pattern."""
+        """Start the multi-agent orchestration."""
         await self._register_agents(runtime)
         await self._add_subscriptions(runtime)
         await self._start(task, runtime)
 
     @abstractmethod
     async def _start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
-        """Start the multi-agent pattern."""
+        """Start the multi-agent orchestration."""
         pass
 
     @abstractmethod

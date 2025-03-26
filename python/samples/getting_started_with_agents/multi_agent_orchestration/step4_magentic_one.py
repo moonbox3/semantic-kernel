@@ -7,11 +7,11 @@ from autogen_core import SingleThreadedAgentRuntime
 
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
 from semantic_kernel.agents.open_ai.open_ai_assistant_agent import OpenAIAssistantAgent
-from semantic_kernel.agents.patterns.magentic_one import MagenticOnePattern
+from semantic_kernel.agents.orchestration.magentic_one import MagenticOneOrchestration
 from semantic_kernel.connectors.ai.open_ai.services.open_ai_chat_completion import OpenAIChatCompletion
 
 logging.basicConfig(level=logging.WARNING)  # Set default level to WARNING
-logging.getLogger("semantic_kernel.agents.patterns.magentic_one").setLevel(
+logging.getLogger("semantic_kernel.agents.orchestration.magentic_one").setLevel(
     logging.DEBUG
 )  # Enable DEBUG for group chat pattern
 
@@ -41,7 +41,7 @@ async def main():
         definition=definition,
     )
 
-    magentic_one_pattern = MagenticOnePattern(
+    magentic_one_pattern = MagenticOneOrchestration(
         agents=[research_agent, coder_agent],
         manager_service=OpenAIChatCompletion(),
     )

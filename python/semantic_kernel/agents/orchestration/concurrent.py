@@ -9,8 +9,8 @@ from autogen_core import MessageContext, SingleThreadedAgentRuntime, TopicId, Ty
 from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent
-from semantic_kernel.agents.patterns.agent_container import AgentContainerBase
-from semantic_kernel.agents.patterns.pattern_base import MultiAgentPatternBase
+from semantic_kernel.agents.orchestration.agent_container import AgentContainerBase
+from semantic_kernel.agents.orchestration.agent_orchestration_base import AgentOrchestrationBase
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from semantic_kernel.kernel_pydantic import KernelBaseModel
@@ -66,8 +66,8 @@ class CollectionAgentContainer(AgentContainerBase):
         print(f"From {ctx.sender}: {message.body.content}")
 
 
-class ConcurrentPattern(MultiAgentPatternBase):
-    """A concurrent multi-agent pattern."""
+class ConcurrentOrchestration(AgentOrchestrationBase):
+    """A concurrent multi-agent pattern orchestration."""
 
     agents: list[Agent] = Field(default_factory=list)
 

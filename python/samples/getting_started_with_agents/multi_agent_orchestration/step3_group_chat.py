@@ -7,13 +7,13 @@ from typing import Annotated
 from autogen_core import SingleThreadedAgentRuntime
 
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
-from semantic_kernel.agents.patterns.group_chat import GroupChatPattern, KernelFunctionGroupChatManager
+from semantic_kernel.agents.orchestration.group_chat import GroupChatOrchestration, KernelFunctionGroupChatManager
 from semantic_kernel.connectors.ai.open_ai.services.open_ai_chat_completion import OpenAIChatCompletion
 from semantic_kernel.functions import kernel_function
 from semantic_kernel.kernel import Kernel
 
 logging.basicConfig(level=logging.WARNING)  # Set default level to WARNING
-logging.getLogger("semantic_kernel.agents.patterns.group_chat").setLevel(
+logging.getLogger("semantic_kernel.agents.orchestration.group_chat").setLevel(
     logging.DEBUG
 )  # Enable DEBUG for group chat pattern
 
@@ -49,7 +49,7 @@ async def main():
         service=OpenAIChatCompletion(),
     )
     user_proxy = ChatCompletionAgent(
-        name="UserProxy",
+        name="UserProxyAgent",
         description="A user proxy to show user the draft and get feedback.",
         instructions=(
             "You are a user proxy. You interact with the user and summarize the user feedback to the writer and editor."
@@ -61,7 +61,7 @@ async def main():
 
     kernel: Kernel = Kernel(services=[OpenAIChatCompletion()])
 
-    group_chat_pattern = GroupChatPattern(
+    group_chat_pattern = GroupChatOrchestration(
         manager=KernelFunctionGroupChatManager(kernel=kernel, max_rounds=10),
         agents=[
             writer_agent,
