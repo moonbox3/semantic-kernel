@@ -8,8 +8,11 @@ from autogen_core import SingleThreadedAgentRuntime
 
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
 from semantic_kernel.agents.orchestration.group_chat import GroupChatOrchestration, KernelFunctionGroupChatManager
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
 from semantic_kernel.connectors.ai.open_ai.services.open_ai_chat_completion import OpenAIChatCompletion
+from semantic_kernel.connectors.ai.prompt_execution_settings import PromptExecutionSettings
 from semantic_kernel.functions import kernel_function
+from semantic_kernel.functions.kernel_arguments import KernelArguments
 from semantic_kernel.kernel import Kernel
 
 logging.basicConfig(level=logging.WARNING)  # Set default level to WARNING
@@ -22,12 +25,12 @@ class UserPlugin:
     """A plugin that interacts with the user."""
 
     @kernel_function(description="Request user for feedback.")
-    def interact(
+    def request_for_feedback(
         self,
         request: Annotated[str, "The request to the user."],
         full_content: Annotated[str, "The full content to show to the user."],
     ) -> Annotated[str, "User's response."]:
-        """Interact with the user."""
+        """Request user for feedback."""
         return input(f"{request}\n{full_content}\n> ")
 
 
@@ -50,13 +53,18 @@ async def main():
     )
     user_proxy = ChatCompletionAgent(
         name="UserProxyAgent",
-        description="A user proxy to show user the draft and get feedback.",
+        description="An agent that represents the user.",
         instructions=(
-            "You are a user proxy. You interact with the user and summarize the user feedback to the writer and editor."
-            " You are responsible for communicating the user's feedback to the writer and editor."
+            "You represent the user in an autonomous workflow consisting multiple autonomous agents. "
+            "Relay user's feedback, requirements, and approvals back to the workflow by saying 'The user says: ...'."
         ),
         service=OpenAIChatCompletion(),
         plugins=[UserPlugin()],
+        arguments=KernelArguments(
+            settings=PromptExecutionSettings(
+                function_choice_behavior=FunctionChoiceBehavior.Required(),
+            )
+        ),
     )
 
     kernel: Kernel = Kernel(services=[OpenAIChatCompletion()])
