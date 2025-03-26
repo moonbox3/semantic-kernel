@@ -10,7 +10,14 @@ from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
-from semantic_kernel.agents.patterns.core._magentic_one_prompts import (
+from semantic_kernel.agents.patterns.group_chat import (
+    GroupChatAgentContainer,
+    GroupChatRequestMessage,
+    GroupChatResetMessage,
+    GroupChatResponseMessage,
+)
+from semantic_kernel.agents.patterns.pattern_base import MultiAgentPatternBase
+from semantic_kernel.agents.patterns.prompts._magentic_one_prompts import (
     ORCHESTRATOR_FINAL_ANSWER_PROMPT,
     ORCHESTRATOR_PROGRESS_LEDGER_PROMPT,
     ORCHESTRATOR_TASK_LEDGER_FACTS_PROMPT,
@@ -19,13 +26,6 @@ from semantic_kernel.agents.patterns.core._magentic_one_prompts import (
     ORCHESTRATOR_TASK_LEDGER_PLAN_PROMPT,
     ORCHESTRATOR_TASK_LEDGER_PLAN_UPDATE_PROMPT,
 )
-from semantic_kernel.agents.patterns.core.group_chat import (
-    GroupChatAgentContainer,
-    GroupChatRequestMessage,
-    GroupChatResetMessage,
-    GroupChatResponseMessage,
-)
-from semantic_kernel.agents.patterns.core.pattern_base import MultiAgentPatternBase
 from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
 from semantic_kernel.connectors.ai.prompt_execution_settings import PromptExecutionSettings
 from semantic_kernel.contents.chat_history import ChatHistory

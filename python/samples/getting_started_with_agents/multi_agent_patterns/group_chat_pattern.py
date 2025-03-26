@@ -7,13 +7,13 @@ from typing import Annotated
 from autogen_core import SingleThreadedAgentRuntime
 
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
-from semantic_kernel.agents.patterns.core.group_chat import GroupChatPattern, KernelFunctionGroupChatManager
+from semantic_kernel.agents.patterns.group_chat import GroupChatPattern, KernelFunctionGroupChatManager
 from semantic_kernel.connectors.ai.open_ai.services.open_ai_chat_completion import OpenAIChatCompletion
 from semantic_kernel.functions import kernel_function
 from semantic_kernel.kernel import Kernel
 
 logging.basicConfig(level=logging.WARNING)  # Set default level to WARNING
-logging.getLogger("semantic_kernel.agents.patterns.core.group_chat").setLevel(
+logging.getLogger("semantic_kernel.agents.patterns.group_chat").setLevel(
     logging.DEBUG
 )  # Enable DEBUG for group chat pattern
 

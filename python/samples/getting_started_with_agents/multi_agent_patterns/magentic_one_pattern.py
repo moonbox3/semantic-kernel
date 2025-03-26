@@ -7,12 +7,12 @@ from typing import Annotated
 from autogen_core import SingleThreadedAgentRuntime
 
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
-from semantic_kernel.agents.patterns.core.magentic_one import MagenticOnePattern
+from semantic_kernel.agents.patterns.magentic_one import MagenticOnePattern
 from semantic_kernel.connectors.ai.open_ai.services.open_ai_chat_completion import OpenAIChatCompletion
 from semantic_kernel.functions import kernel_function
 
 logging.basicConfig(level=logging.WARNING)  # Set default level to WARNING
-logging.getLogger("semantic_kernel.agents.patterns.core.magentic_one").setLevel(
+logging.getLogger("semantic_kernel.agents.patterns.magentic_one").setLevel(
     logging.DEBUG
 )  # Enable DEBUG for group chat pattern
 

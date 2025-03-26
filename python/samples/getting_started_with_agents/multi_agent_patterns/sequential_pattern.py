@@ -6,11 +6,11 @@ import logging
 from autogen_core import SingleThreadedAgentRuntime
 
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
-from semantic_kernel.agents.patterns.core.sequential import SequentialPattern
+from semantic_kernel.agents.patterns.sequential import SequentialPattern
 from semantic_kernel.connectors.ai.open_ai.services.open_ai_chat_completion import OpenAIChatCompletion
 
 logging.basicConfig(level=logging.WARNING)  # Set default level to WARNING
-logging.getLogger("semantic_kernel.agents.patterns.core.sequential").setLevel(
+logging.getLogger("semantic_kernel.agents.patterns.sequential").setLevel(
     logging.DEBUG
 )  # Enable DEBUG for the sequential pattern
 
