@@ -9,7 +9,7 @@ from typing import ClassVar
 from autogen_core import MessageContext, SingleThreadedAgentRuntime, TopicId, TypeSubscription, message_handler
 from pydantic import Field
 
-from semantic_kernel.agents.agent import Agent
+from semantic_kernel.agents.agent import Agent, AgentThread
 from semantic_kernel.agents.patterns.agent_container import AgentContainerBase
 from semantic_kernel.agents.patterns.pattern_base import MultiAgentPatternBase
 from semantic_kernel.contents.chat_history import ChatHistory
@@ -49,17 +49,25 @@ class GroupChatResetMessage(KernelBaseModel):
 class GroupChatAgentContainer(AgentContainerBase):
     """A agent container for agents that process messages in a group chat."""
 
-    chat_history: ChatHistory = Field(default_factory=ChatHistory, description="The chat history of the agent.")
+    chat_history: ChatHistory = Field(
+        default_factory=ChatHistory, description="Temporary message storage between invocations."
+    )
+    agent_thread: AgentThread | None = None
 
     @message_handler
     async def _on_group_chat_reset(self, message: GroupChatResetMessage, ctx: MessageContext) -> None:
         self.chat_history.clear()
+        if self.agent_thread:
+            await self.agent_thread.delete()
+            self.agent_thread = None
+        else:
+            logger.warning("Non-existent agent thread cannot be deleted.")
 
     @message_handler
     async def _on_group_chat_message(self, message: GroupChatResponseMessage, ctx: MessageContext) -> None:
         self.chat_history.add_message(
             ChatMessageContent(
-                role=AuthorRole.SYSTEM,
+                role=AuthorRole.USER,
                 content=f"Transferred to {message.body.name}",
             )
         )
@@ -75,15 +83,17 @@ class GroupChatAgentContainer(AgentContainerBase):
             f"Group chat container (Container ID: {self.id}; Agent name: {self.agent.name}) started processing..."
         )
 
-        # Add a system message to steer the agent to respond more closely to the instructions.
+        # Add a user message to steer the agent to respond more closely to the instructions.
         self.chat_history.add_message(
             ChatMessageContent(
-                role=AuthorRole.SYSTEM,
+                role=AuthorRole.USER,
                 content=f"Transferred to {self.agent.name}, adopt the persona immediately.",
             )
         )
-        response = await self.agent.get_response(messages=self.chat_history.messages)
-        self.chat_history.add_message(response.message)
+        response = await self.agent.get_response(messages=self.chat_history.messages, thread=self.agent_thread)
+
+        self.chat_history.clear()
+        self.agent_thread = response.thread
 
         logger.debug(
             f"Group chat container (Container ID: {self.id}; Agent name: {self.agent.name}) finished processing."

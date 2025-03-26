@@ -156,7 +156,13 @@ class MagenticOneManager(GroupChatAgentContainer):
         # Need to add the task ledger to the orchestrator's chat history
         # since the publisher won't receive the message it sends even though
         # the publisher also subscribes to the topic.
-        self.chat_history.add_message(ChatMessageContent(role=AuthorRole.USER, content=task_ledger))
+        self.chat_history.add_message(
+            ChatMessageContent(
+                role=AuthorRole.USER,
+                content=task_ledger,
+                name=self.__class__.__name__,
+            )
+        )
         await self.publish_message(
             GroupChatResponseMessage(
                 body=self.chat_history.messages[-1],
@@ -216,7 +222,13 @@ class MagenticOneManager(GroupChatAgentContainer):
             return
 
         next_step = current_progress_ledger.instruction_or_question.answer
-        self.chat_history.add_message(ChatMessageContent(role=AuthorRole.USER, content=next_step))
+        self.chat_history.add_message(
+            ChatMessageContent(
+                role=AuthorRole.USER,
+                content=next_step,
+                name=self.__class__.__name__,
+            )
+        )
         await self.publish_message(
             GroupChatResponseMessage(
                 body=self.chat_history.messages[-1],
