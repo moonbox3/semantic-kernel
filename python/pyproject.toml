@@ -55,7 +55,7 @@ dependencies = [
 ### Optional dependencies
 [project.optional-dependencies]
 agent-runtime = [
-    "agent_runtime @ file:///Users/evmattso/git/agent-runtime/python"
+    "agent_runtime @ file:///Users/evmattso/git/agent-runtime/python/dist/agent_runtime-1.0.0b1-py3-none-any.whl"
 ]
 autogen = [
     "autogen-agentchat >= 0.2, <0.4",

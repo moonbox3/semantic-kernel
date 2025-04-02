@@ -8,9 +8,7 @@ from inspect import isawaitable
 from queue import Queue
 from typing import TYPE_CHECKING, Any
 
-from agent_runtime import AgentId
-from agent_runtime.in_process.base_agent import BaseAgent
-from agent_runtime.in_process.message_context import MessageContext
+from agent_runtime import AgentId, BaseAgent, CoreAgentId, MessageContext
 
 from semantic_kernel.exceptions.kernel_exceptions import KernelException
 from semantic_kernel.exceptions.process_exceptions import (
@@ -103,7 +101,7 @@ class CoreStep(BaseAgent, KernelProcessMessageChannel):
     async def _handle_prepare_incoming_messages(self) -> int:
         from semantic_kernel.processes.core_runtime.messages import DequeueAllMessages
 
-        mb_id = AgentId("MessageBufferAgent", f"{self._id.key}.{self.step_state.id}")
+        mb_id = CoreAgentId("MessageBufferAgent", f"{self._id.key}.{self.step_state.id}")
         raw_list = await self._runtime.send_message(DequeueAllMessages(), mb_id)
 
         count = 0
@@ -289,12 +287,12 @@ class CoreStep(BaseAgent, KernelProcessMessageChannel):
     async def emit_process_event(self, core_event: ProcessEvent):
         """Emits an event from the step."""
         if core_event.visibility == KernelProcessEventVisibility.Public and self.parent_process_id is not None:
-            parent_process_id = AgentId("EventBufferAgent", self.parent_process_id)
+            parent_process_id = CoreAgentId("EventBufferAgent", self.parent_process_id)
             await self._runtime.send_message(EnqueueEvent(event_json=core_event.model_dump_json()), parent_process_id)
 
         for edge in self.get_edge_for_event(core_event.id):
             message: ProcessMessage = ProcessMessageFactory.create_from_edge(edge, core_event.data)
-            scoped_step_id = self._scoped_actor_id(AgentId("MessageBufferAgent", edge.output_target.step_id))
+            scoped_step_id = self._scoped_actor_id(CoreAgentId("MessageBufferAgent", edge.output_target.step_id))
             await self._runtime.send_message(EnqueueMessage(message_json=message.model_dump_json()), scoped_step_id)
 
         # TODO(evmattso): handle cases where error event is raised
@@ -306,7 +304,7 @@ class CoreStep(BaseAgent, KernelProcessMessageChannel):
 
         id = self.parent_process_id if scope_to_parent else self._id.key
 
-        return AgentId(agent_id.type, f"{id}.{agent_id.key}")
+        return CoreAgentId(agent_id.type, f"{id}.{agent_id.key}")
 
     @property
     def name(self) -> str:

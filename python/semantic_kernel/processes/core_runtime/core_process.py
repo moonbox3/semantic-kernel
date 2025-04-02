@@ -9,8 +9,7 @@ from collections.abc import MutableSequence
 from queue import Queue
 from typing import TYPE_CHECKING, Any
 
-from agent_runtime import AgentId, InProcessRuntime
-from agent_runtime.in_process.message_context import MessageContext
+from agent_runtime import AgentId, CoreAgentId, InProcessRuntime, MessageContext
 
 from semantic_kernel.exceptions.process_exceptions import ProcessEventUndefinedException
 from semantic_kernel.processes.const import END_PROCESS_ID
@@ -107,13 +106,13 @@ class CoreProcess(CoreStep):
                 if not step.state.id:
                     step.state.id = str(uuid.uuid4().hex)
                 # nested process
-                scoped_process_id = self._scoped_actor_id(AgentId("CoreProcess", step.state.id))
+                scoped_process_id = self._scoped_actor_id(CoreAgentId("CoreProcess", step.state.id))
                 init_msg = InitializeStepMessage(step_info_str=step.model_dump_json(), parent_process_id=self._id.key)
                 await self._runtime.send_message(init_msg, scoped_process_id)
             else:
                 # The current step should already have an Id.
                 assert step.state and step.state.id is not None  # nosec
-                scoped_step_id = self._scoped_actor_id(AgentId("CoreStep", step.state.id))
+                scoped_step_id = self._scoped_actor_id(CoreAgentId("CoreStep", step.state.id))
                 init_msg = InitializeStepMessage(step_info_str=step.model_dump_json(), parent_process_id=self._id.key)
                 await self._runtime.send_message(init_msg, scoped_step_id)
 
@@ -133,7 +132,7 @@ class CoreProcess(CoreStep):
         if not msg.process_event:
             raise ProcessEventUndefinedException("Must supply a process_event.")
         # Enqueue the event in external buffer
-        ext_event_buf_id = AgentId("ExternalEventBufferAgent", self._id.key)
+        ext_event_buf_id = CoreAgentId("ExternalEventBufferAgent", self._id.key)
         await self._runtime.send_message(
             EnqueueMessage(message_json=msg.process_event.model_dump_json()), ext_event_buf_id
         )
@@ -157,7 +156,7 @@ class CoreProcess(CoreStep):
         if not msg.process_event:
             raise ValueError("No event specified")
         # Enqueue in external buffer
-        ext_buf_id = AgentId("ExternalEventBufferAgent", self._id.key)
+        ext_buf_id = CoreAgentId("ExternalEventBufferAgent", self._id.key)
         await self._runtime.send_message(
             EnqueueExternalEvent(event_json=msg.process_event.model_dump_json()), ext_buf_id
         )
@@ -185,7 +184,7 @@ class CoreProcess(CoreStep):
     async def _get_step_as_process_info(self, step: CoreStepInfo | CoreProcessInfo) -> Any:
         """Get a step as process info."""
         agent_type = self._get_agent_type(step)
-        scoped_step_id = self._scoped_actor_id(AgentId(agent_type, step.state.id))
+        scoped_step_id = self._scoped_actor_id(CoreAgentId(agent_type, step.state.id))
         return await self._runtime.send_message(ToCoreStepInfoMessage(), scoped_step_id)
 
     async def _internal_execute(self, max_supersteps=100, keep_alive=True):
@@ -212,12 +211,12 @@ class CoreProcess(CoreStep):
 
     async def _prepare_incoming_messages(self, step: CoreStepInfo | CoreProcessInfo) -> int:
         agent_type = self._get_agent_type(step)
-        scoped_step_id = self._scoped_actor_id(AgentId(agent_type, step.state.id))
+        scoped_step_id = self._scoped_actor_id(CoreAgentId(agent_type, step.state.id))
         return await self._runtime.send_message(PrepareIncomingMessagesMessage(), scoped_step_id)
 
     async def _process_incoming_messages(self, step: CoreStepInfo | CoreProcessInfo) -> None:
         agent_type = self._get_agent_type(step)
-        scoped_step_id = self._scoped_actor_id(AgentId(agent_type, step.state.id))
+        scoped_step_id = self._scoped_actor_id(CoreAgentId(agent_type, step.state.id))
         await self._runtime.send_message(ProcessIncomingMessagesMessage(), scoped_step_id)
 
     def _get_agent_type(self, step: CoreStepInfo | CoreProcessInfo) -> str:
@@ -229,12 +228,12 @@ class CoreProcess(CoreStep):
         raise ValueError(f"Unknown step type: {step.type}")
 
     async def _check_end(self) -> bool:
-        scoped_end_mb_id = self._scoped_actor_id(AgentId("MessageBufferAgent", END_PROCESS_ID))
+        scoped_end_mb_id = self._scoped_actor_id(CoreAgentId("MessageBufferAgent", END_PROCESS_ID))
         leftover = await self._runtime.send_message(DequeueAllMessages(), scoped_end_mb_id)
         return len(leftover) > 0
 
     async def _enqueue_external_events(self):
-        ext_buf_id = AgentId("ExternalEventBufferAgent", self._id.key)
+        ext_buf_id = CoreAgentId("ExternalEventBufferAgent", self._id.key)
         leftover = await self._runtime.send_message(DequeueAllMessages(), ext_buf_id)
 
         event_objs = []
@@ -251,14 +250,14 @@ class CoreProcess(CoreStep):
                     pm = ProcessMessageFactory.create_from_edge(edge, ev.data)
                     target_step = edge.output_target.step_id
                     if target_step:
-                        scoped_mb_id = self._scoped_actor_id(AgentId("MessageBufferAgent", target_step))
+                        scoped_mb_id = self._scoped_actor_id(CoreAgentId("MessageBufferAgent", target_step))
                         await self._runtime.send_message(
                             EnqueueMessage(message_json=pm.model_dump_json()), scoped_mb_id
                         )
 
     async def _handle_public_events(self):
         if self.parent_process_id is not None:
-            evbuf_id = AgentId("EventBufferAgent", self._id.key)
+            evbuf_id = CoreAgentId("EventBufferAgent", self._id.key)
             leftover = await self._runtime.send_message(DequeueAllMessages(), evbuf_id)
 
             for s in leftover or []:
@@ -274,7 +273,7 @@ class CoreProcess(CoreStep):
                         pm = ProcessMessageFactory.create_from_edge(edge, p_ev.data)
                         if edge.output_target.step_id:
                             scoped_mb_id = self._scoped_actor_id(
-                                AgentId("EventBufferAgent", edge.output_target.step_id), scope_to_parent=True
+                                CoreAgentId("EventBufferAgent", edge.output_target.step_id), scope_to_parent=True
                             )
 
                             await self._runtime.send_message(

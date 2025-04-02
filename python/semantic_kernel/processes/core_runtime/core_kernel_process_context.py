@@ -2,7 +2,7 @@
 
 import uuid
 
-from agent_runtime import AgentId, InProcessRuntime
+from agent_runtime import CoreAgentId, InProcessRuntime
 
 from semantic_kernel.kernel import Kernel
 from semantic_kernel.processes.core_runtime.core_process import CoreProcess
@@ -33,7 +33,7 @@ class CoreKernelProcessContext:
             process.state.id = str(uuid.uuid4().hex)
 
         self.process = process
-        self.process_agent_id = AgentId("CoreProcess", process.state.id)
+        self.process_agent_id = CoreAgentId("CoreProcess", process.state.id)
         self.runtime = InProcessRuntime()
 
     async def start_with_event(self, initial_event: KernelProcessEvent) -> None:
@@ -88,7 +88,7 @@ class CoreKernelProcessContext:
         await self.runtime.register_factory("CoreStep", agent_factory=step_agent_factory)
 
         async def message_buffer_factory():  # noqa: RUF029
-            return MessageBufferAgent(AgentId("MessageBufferAgent", "MessageBufferAgent"))
+            return MessageBufferAgent(CoreAgentId("MessageBufferAgent", "MessageBufferAgent"))
 
         await self.runtime.register_factory(
             "MessageBufferAgent",
@@ -96,7 +96,7 @@ class CoreKernelProcessContext:
         )
 
         async def event_buffer_factory():  # noqa: RUF029
-            return EventBufferAgent(AgentId("EventBufferAgent", "EventBufferAgent"))
+            return EventBufferAgent(CoreAgentId("EventBufferAgent", "EventBufferAgent"))
 
         await self.runtime.register_factory(
             "EventBufferAgent",
@@ -104,7 +104,7 @@ class CoreKernelProcessContext:
         )
 
         async def external_event_buffer_factory():  # noqa: RUF029
-            return ExternalEventBufferAgent(AgentId("ExternalEventBufferAgent", "ExternalEventBufferAgent"))
+            return ExternalEventBufferAgent(CoreAgentId("ExternalEventBufferAgent", "ExternalEventBufferAgent"))
 
         await self.runtime.register_factory(
             "ExternalEventBufferAgent",

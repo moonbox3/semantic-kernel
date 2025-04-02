@@ -4,10 +4,6 @@
 from semantic_kernel.kernel_pydantic import KernelBaseModel
 from semantic_kernel.processes.kernel_process.kernel_process_event import KernelProcessEvent
 
-#
-# ---- Step Agent messages ----
-#
-
 
 class InitializeStepMessage(KernelBaseModel):
     """Tells a StepAgent to initialize itself with a CoreStepInfo payload in JSON form."""
