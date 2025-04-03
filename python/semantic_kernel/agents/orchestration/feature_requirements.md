@@ -1,7 +1,32 @@
 # Multi-agent orchestration feature requirements
 
-1. Define orchestration pattern input and output
-      - Sync (return when the pattern finishes) vs Async (return immediately)
+Feedback:
+0. Provide patterns for orchestrating multiple SK agents
+  - Built-in patterns
+    - Concurrent (Broadcast)
+    - Sequential (Handoff*)
+    - GroupChat
+      - Magentic
+      - Handoff
+      - Swarm
+  - Support ability to allow devs to create custom patterns
+    - Well-defined building blocks for custom patterns
+    - Naming: container?
+  - Support multiple invocations (one pattern invoked multiple times)*?
+  - Patterns should only depend upon the runtime abstraction
+    - The runtime must be provided when the pattern is invoked.
+    - The lifecycle is managed by the application (external to the pattern).
+  - Runtime regristration
+    - Agents
+      - Register the agents and patterns in the runtime before the execution starts.
+    - Topics
+      - Add subscriptions to the runtime before the execution starts.
+    - No collisions
+    - Remove registrations and subscriptions from the runtime after the execution finishes to avoid name collisions.
+
+
+1. Define orchestration pattern input and completion
+      - Completion: Sync (return when the pattern finishes) vs Async (return immediately)
         - Considerations: easy to get started vs scalability
         - Sync: return the result of the pattern when it finishes
         - Async: broadcast the result of the pattern when it finishes
@@ -16,11 +41,6 @@
       - Considerations: being able to nest patterns that can create very complex workflows
       - Patterns need to have the same invocation signature
       - Patterns need to accept SK agents and arbitrary patterns at construction time
-      - Runtime
-          - Patterns shouldn't not be aware of the runtime. The runtime should be provided when the pattern is invoked.
-          - Register the agents and patterns in the runtime before the execution starts.
-          - Add subscriptions to the runtime before the execution starts.
-          - Remove registrations and subscriptions from the runtime after the execution finishes to avoid name collisions.
 3. User Proxy
       - Considerations: keep the user in the loop and allow them to intervene in the orchestration process
 4. Save states and rehydration
