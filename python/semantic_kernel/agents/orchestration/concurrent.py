@@ -6,11 +6,10 @@ import sys
 from typing import ClassVar
 
 from autogen_core import MessageContext, SingleThreadedAgentRuntime, TopicId, TypeSubscription, message_handler
-from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent
-from semantic_kernel.agents.orchestration.agent_container import AgentContainerBase
-from semantic_kernel.agents.orchestration.agent_orchestration_base import AgentOrchestrationBase
+from semantic_kernel.agents.orchestration.container_base import ContainerBase
+from semantic_kernel.agents.orchestration.orchestration_base import OrchestrationBase
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from semantic_kernel.kernel_pydantic import KernelBaseModel
@@ -35,7 +34,7 @@ class ConcurrentResponseMessage(KernelBaseModel):
     body: ChatMessageContent
 
 
-class ConcurrentAgentContainer(AgentContainerBase):
+class ConcurrentAgentContainer(ContainerBase):
     """A agent container for concurrent agents that process tasks."""
 
     @message_handler
@@ -54,7 +53,7 @@ class ConcurrentAgentContainer(AgentContainerBase):
         await self.publish_message(ConcurrentResponseMessage(body=response.message), ctx.topic_id)
 
 
-class CollectionAgentContainer(AgentContainerBase):
+class CollectionAgentContainer(ContainerBase):
     """A agent container for collection results from concurrent agents."""
 
     def __init__(self, **kwargs):
@@ -66,10 +65,8 @@ class CollectionAgentContainer(AgentContainerBase):
         print(f"From {ctx.sender}: {message.body.content}")
 
 
-class ConcurrentOrchestration(AgentOrchestrationBase):
+class ConcurrentOrchestration(OrchestrationBase):
     """A concurrent multi-agent pattern orchestration."""
-
-    agents: list[Agent] = Field(default_factory=list)
 
     COLLECTION_AGENT_TYPE: ClassVar[str] = "concurrent_collection_container"
 

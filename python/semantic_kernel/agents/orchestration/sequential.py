@@ -6,11 +6,10 @@ import sys
 from typing import ClassVar
 
 from autogen_core import MessageContext, SingleThreadedAgentRuntime, TopicId, TypeSubscription, message_handler
-from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent
-from semantic_kernel.agents.orchestration.agent_container import AgentContainerBase
-from semantic_kernel.agents.orchestration.agent_orchestration_base import AgentOrchestrationBase
+from semantic_kernel.agents.orchestration.container_base import ContainerBase
+from semantic_kernel.agents.orchestration.orchestration_base import OrchestrationBase
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from semantic_kernel.kernel_pydantic import KernelBaseModel
@@ -30,7 +29,7 @@ class SequentialRequestMessage(KernelBaseModel):
     body: ChatMessageContent
 
 
-class SequentialAgentContainer(AgentContainerBase):
+class SequentialAgentContainer(ContainerBase):
     """A agent container for sequential agents that process tasks."""
 
     def __init__(self, agent: Agent, **kwargs) -> None:
@@ -56,7 +55,7 @@ class SequentialAgentContainer(AgentContainerBase):
         )
 
 
-class CollectionAgentContainer(AgentContainerBase):
+class CollectionAgentContainer(ContainerBase):
     """A agent container for collection results from the last agent in the sequence."""
 
     def __init__(self, **kwargs) -> None:
@@ -68,10 +67,8 @@ class CollectionAgentContainer(AgentContainerBase):
         print(f"From {ctx.sender}: {message.body.content}")
 
 
-class SequentialOrchestration(AgentOrchestrationBase):
+class SequentialOrchestration(OrchestrationBase):
     """A sequential multi-agent pattern orchestration."""
-
-    agents: list[Agent] = Field(default_factory=list)
 
     COLLECTION_AGENT_TYPE: ClassVar[str] = "sequential_collection_container"
     COLLECTION_AGENT_TOPIC_PREFIX: ClassVar[str] = "sequential_collection_container_topic"

@@ -6,11 +6,26 @@ from abc import ABC, abstractmethod
 from autogen_core import SingleThreadedAgentRuntime
 from pydantic import Field
 
+from semantic_kernel.agents.agent import Agent
 from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 
-class AgentOrchestrationBase(KernelBaseModel, ABC):
+class OrchestrationStartMessage(KernelBaseModel):
+    """A orchestration start message type that kicks off the multi-agent orchestration."""
+
+    pass
+
+
+class OrchestrationResultMessage(KernelBaseModel):
+    """A orchestration result message type that contains the result of the multi-agent orchestration."""
+
+    pass
+
+
+class OrchestrationBase(KernelBaseModel, ABC):
     """Base class for multi-agent orchestration."""
+
+    agents: list[Agent] = Field(default_factory=list)
 
     shared_topic_type: str = Field(
         default_factory=lambda: uuid.uuid4().hex,

@@ -10,13 +10,13 @@ from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
-from semantic_kernel.agents.orchestration.agent_orchestration_base import AgentOrchestrationBase
 from semantic_kernel.agents.orchestration.group_chat import (
     GroupChatAgentContainer,
     GroupChatRequestMessage,
     GroupChatResetMessage,
     GroupChatResponseMessage,
 )
+from semantic_kernel.agents.orchestration.orchestration_base import OrchestrationBase
 from semantic_kernel.agents.orchestration.prompts._magentic_one_prompts import (
     ORCHESTRATOR_FINAL_ANSWER_PROMPT,
     ORCHESTRATOR_PROGRESS_LEDGER_PROMPT,
@@ -314,10 +314,9 @@ class MagenticOneManager(GroupChatAgentContainer):
         print(response.content)
 
 
-class MagenticOneOrchestration(AgentOrchestrationBase):
+class MagenticOneOrchestration(OrchestrationBase):
     """The Magentic One pattern orchestration."""
 
-    agents: list[Agent] = Field(default_factory=list)
     manager_service: ChatCompletionClientBase | None = None
     manager: MagenticOneManager | None = None
 

@@ -9,11 +9,11 @@ from semantic_kernel.agents.agent import Agent
 from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 
-class AgentContainerBaseMetaClass(type(KernelBaseModel), type(RoutedAgent)):
+class ContainerBaseMetaClass(type(KernelBaseModel), type(RoutedAgent)):
     """Meta class for Semantic Kernel agents."""
 
 
-class AgentContainerBase(KernelBaseModel, RoutedAgent, ABC, metaclass=AgentContainerBaseMetaClass):
+class ContainerBase(KernelBaseModel, RoutedAgent, ABC, metaclass=ContainerBaseMetaClass):
     """A base agent container for multi-agent orchestration running on Agent runtime."""
 
     agent: Agent | None = Field(default=None, description="An agent to be run in the container.")
