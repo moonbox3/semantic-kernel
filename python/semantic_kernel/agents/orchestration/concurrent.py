@@ -63,7 +63,7 @@ class ConcurrentAgentContainer(ContainerBase):
         )
 
 
-class CollectionAgentContainer(RoutedAgent):
+class CollectionAgent(RoutedAgent):
     """A agent container for collection results from concurrent agents."""
 
     def __init__(self, description: str, internal_topic_type: str, expected_answer_count: int) -> None:
@@ -92,11 +92,11 @@ class ConcurrentOrchestration(OrchestrationBase):
     @override
     async def _start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
         """Start the concurrent pattern."""
-        collection_agent_type = f"self.Collection_{uuid.uuid4().hex}"
-        await CollectionAgentContainer.register(
+        collection_agent_type = f"Collection_{uuid.uuid4().hex}"
+        await CollectionAgent.register(
             runtime,
             collection_agent_type,
-            lambda: CollectionAgentContainer(
+            lambda: CollectionAgent(
                 description="An internal agent that is responsible for collection results",
                 internal_topic_type=self.internal_topic_type,
                 expected_answer_count=len(self.agents),

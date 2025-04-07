@@ -55,10 +55,18 @@ async def main():
             format_proof_agent,
         ]
     )
-    await sequential_pattern.start(
+
+    runtime = SingleThreadedAgentRuntime()
+    runtime.start()
+
+    result = await sequential_pattern.invoke(
         task="An eco-friendly stainless steel water bottle that keeps drinks cold for 24 hours",
-        runtime=SingleThreadedAgentRuntime(),
+        runtime=runtime,
     )
+
+    await runtime.stop_when_idle()
+
+    print(result)
 
 
 if __name__ == "__main__":
