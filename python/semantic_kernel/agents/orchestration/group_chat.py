@@ -104,7 +104,7 @@ class GroupChatAgentContainer(ContainerBase):
 
         await self.publish_message(
             GroupChatResponseMessage(body=response.message),
-            TopicId(self.shared_topic_type, self.id.key),
+            TopicId(self.internal_topic_type, self.id.key),
         )
 
 
@@ -429,7 +429,7 @@ class GroupChatManagerContainer(GroupChatAgentContainer):
                 self.chat_history.add_message(ChatMessageContent(role=AuthorRole.USER, content=user_input))
                 await self.publish_message(
                     GroupChatResponseMessage(body=ChatMessageContent(role=AuthorRole.USER, content=user_input)),
-                    TopicId(self.shared_topic_type, self.id.key),
+                    TopicId(self.internal_topic_type, self.id.key),
                 )
                 logger.debug("User input received and added to chat history.")
 
@@ -468,20 +468,10 @@ class GroupChatOrchestration(OrchestrationBase):
         """Start the group chat pattern."""
         message = ChatMessageContent(AuthorRole.USER, content=task, name="User")
 
-        should_stop = True
-        try:
-            runtime.start()
-        except Exception:
-            should_stop = False
-            logger.warning("Runtime is already started outside of the pattern.")
-
         await runtime.publish_message(
             GroupChatResponseMessage(body=message),
-            TopicId(self.shared_topic_type, "default"),
+            TopicId(self.internal_topic_type, "default"),
         )
-
-        if should_stop:
-            await runtime.stop_when_idle()
 
     @override
     async def _register_agents(self, runtime: SingleThreadedAgentRuntime) -> None:
@@ -493,7 +483,7 @@ class GroupChatOrchestration(OrchestrationBase):
                 lambda agent=agent: GroupChatAgentContainer(
                     agent,
                     description=agent.description,
-                    shared_topic_type=self.shared_topic_type,
+                    internal_topic_type=self.internal_topic_type,
                 ),
             )
             for agent in self.agents
@@ -505,7 +495,7 @@ class GroupChatOrchestration(OrchestrationBase):
                 manager=self.manager,
                 participant_descriptions={agent.name: agent.description for agent in self.agents},
                 participant_topics={agent.name: self._get_container_topic(agent) for agent in self.agents},
-                shared_topic_type=self.shared_topic_type,
+                internal_topic_type=self.internal_topic_type,
             ),
         )
 
@@ -514,10 +504,10 @@ class GroupChatOrchestration(OrchestrationBase):
         """Add subscriptions."""
         subscriptions: list[TypeSubscription] = []
         for agent in self.agents:
-            subscriptions.append(TypeSubscription(self.shared_topic_type, self._get_container_type(agent)))
+            subscriptions.append(TypeSubscription(self.internal_topic_type, self._get_container_type(agent)))
             subscriptions.append(TypeSubscription(self._get_container_topic(agent), self._get_container_type(agent)))
         await asyncio.gather(*[runtime.add_subscription(sub) for sub in subscriptions])
-        await runtime.add_subscription(TypeSubscription(self.shared_topic_type, self.MANAGER_TYPE))
+        await runtime.add_subscription(TypeSubscription(self.internal_topic_type, self.MANAGER_TYPE))
 
     def _get_container_type(self, agent: Agent) -> str:
         """Get the container type for an agent."""
@@ -525,4 +515,4 @@ class GroupChatOrchestration(OrchestrationBase):
 
     def _get_container_topic(self, agent: Agent) -> str:
         """Get the container topic type for an agent."""
-        return f"{agent.name}_group_chat_{self.shared_topic_type}"
+        return f"{agent.name}_group_chat_{self.internal_topic_type}"

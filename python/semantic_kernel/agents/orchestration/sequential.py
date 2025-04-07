@@ -51,7 +51,7 @@ class SequentialAgentContainer(ContainerBase):
 
         await self.publish_message(
             SequentialRequestMessage(body=response.message),
-            TopicId(self.shared_topic_type, self.id.key),
+            TopicId(self.internal_topic_type, self.id.key),
         )
 
 
@@ -78,20 +78,10 @@ class SequentialOrchestration(OrchestrationBase):
         """Start the sequential pattern."""
         message = ChatMessageContent(AuthorRole.USER, content=task)
 
-        should_stop = True
-        try:
-            runtime.start()
-        except Exception:
-            should_stop = False
-            logger.warning("Runtime is already started outside of the pattern.")
-
         await runtime.publish_message(
             SequentialRequestMessage(body=message),
             TopicId(self._get_container_topic(self.agents[0]), "default"),
         )
-
-        if should_stop:
-            await runtime.stop_when_idle()
 
     @override
     async def _register_agents(self, runtime: SingleThreadedAgentRuntime) -> None:
@@ -100,7 +90,7 @@ class SequentialOrchestration(OrchestrationBase):
             runtime,
             self.COLLECTION_AGENT_TYPE,
             lambda: CollectionAgentContainer(
-                shared_topic_type=self._get_collection_agent_topic(),
+                internal_topic_type=self._get_collection_agent_topic(),
             ),
         )
         await asyncio.gather(*[
@@ -109,7 +99,7 @@ class SequentialOrchestration(OrchestrationBase):
                 self._get_container_type(agent),
                 lambda agent=agent, index=index: SequentialAgentContainer(
                     agent,
-                    shared_topic_type=self._get_container_topic(self.agents[index + 1])
+                    internal_topic_type=self._get_container_topic(self.agents[index + 1])
                     if index + 1 < len(self.agents)
                     else self._get_collection_agent_topic(),
                 ),
@@ -142,8 +132,8 @@ class SequentialOrchestration(OrchestrationBase):
 
     def _get_container_topic(self, agent: Agent) -> str:
         """Get the container topic type for an agent."""
-        return f"{agent.name}_sequential_topic_{self.shared_topic_type}"
+        return f"{agent.name}_sequential_topic_{self.internal_topic_type}"
 
     def _get_collection_agent_topic(self) -> str:
         """Get the collection agent topic."""
-        return f"{self.COLLECTION_AGENT_TOPIC_PREFIX}_{self.shared_topic_type}"
+        return f"{self.COLLECTION_AGENT_TOPIC_PREFIX}_{self.internal_topic_type}"

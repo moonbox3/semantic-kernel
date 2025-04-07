@@ -31,7 +31,19 @@ async def main():
     )
 
     concurrent_pattern = ConcurrentOrchestration(agents=[physics_agent, chemistry_agent])
-    await concurrent_pattern.start(task="Why is the sky blue in one sentence?", runtime=SingleThreadedAgentRuntime())
+
+    runtime = SingleThreadedAgentRuntime()
+    runtime.start()
+
+    result = await concurrent_pattern.invoke(
+        task="Why is the sky blue in one sentence?",
+        runtime=runtime,
+        time_out=5,
+    )
+
+    await runtime.stop_when_idle()
+
+    print(result)
 
 
 if __name__ == "__main__":

@@ -167,7 +167,7 @@ class MagenticOneManager(GroupChatAgentContainer):
             GroupChatResponseMessage(
                 body=self.chat_history.messages[-1],
             ),
-            TopicId(self.shared_topic_type, self.id.key),
+            TopicId(self.internal_topic_type, self.id.key),
         )
         logger.debug(f"Initial task ledger:\n{task_ledger}")
 
@@ -233,7 +233,7 @@ class MagenticOneManager(GroupChatAgentContainer):
             GroupChatResponseMessage(
                 body=self.chat_history.messages[-1],
             ),
-            TopicId(self.shared_topic_type, self.id.key),
+            TopicId(self.internal_topic_type, self.id.key),
         )
 
         # 3. Request the next speaker to speak
@@ -325,20 +325,10 @@ class MagenticOneOrchestration(OrchestrationBase):
     @override
     async def _start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
         """Start the Magentic One pattern."""
-        should_stop = True
-        try:
-            runtime.start()
-        except Exception:
-            should_stop = False
-            logger.warning("Runtime is already started outside of the pattern.")
-
         await runtime.publish_message(
             TaskStartMessage(body=task),
-            TopicId(self.shared_topic_type, "default"),
+            TopicId(self.internal_topic_type, "default"),
         )
-
-        if should_stop:
-            await runtime.stop_when_idle()
 
     @override
     async def _register_agents(self, runtime: SingleThreadedAgentRuntime) -> None:
@@ -350,7 +340,7 @@ class MagenticOneOrchestration(OrchestrationBase):
                 lambda agent=agent: GroupChatAgentContainer(
                     agent,
                     description=agent.description,
-                    shared_topic_type=self.shared_topic_type,
+                    internal_topic_type=self.internal_topic_type,
                 ),
             )
             for agent in self.agents
@@ -366,10 +356,10 @@ class MagenticOneOrchestration(OrchestrationBase):
         """Add subscriptions."""
         subscriptions: list[TypeSubscription] = []
         for agent in self.agents:
-            subscriptions.append(TypeSubscription(self.shared_topic_type, self._get_container_type(agent)))
+            subscriptions.append(TypeSubscription(self.internal_topic_type, self._get_container_type(agent)))
             subscriptions.append(TypeSubscription(self._get_container_topic(agent), self._get_container_type(agent)))
         await asyncio.gather(*[runtime.add_subscription(sub) for sub in subscriptions])
-        await runtime.add_subscription(TypeSubscription(self.shared_topic_type, self.MANAGER_TYPE))
+        await runtime.add_subscription(TypeSubscription(self.internal_topic_type, self.MANAGER_TYPE))
 
     def _create_manager(self) -> MagenticOneManager:
         """Create the manager."""
@@ -381,7 +371,7 @@ class MagenticOneOrchestration(OrchestrationBase):
             service=self.manager_service,
             participant_descriptions={agent.name: agent.description for agent in self.agents},
             participant_topics={agent.name: self._get_container_topic(agent) for agent in self.agents},
-            shared_topic_type=self.shared_topic_type,
+            internal_topic_type=self.internal_topic_type,
         )
 
     def _get_container_type(self, agent: Agent) -> str:
@@ -390,4 +380,4 @@ class MagenticOneOrchestration(OrchestrationBase):
 
     def _get_container_topic(self, agent: Agent) -> str:
         """Get the container topic type for an agent."""
-        return f"{agent.name}group_chat_topic_{self.shared_topic_type}"
+        return f"{agent.name}group_chat_topic_{self.internal_topic_type}"
