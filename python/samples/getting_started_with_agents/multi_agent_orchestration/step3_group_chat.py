@@ -2,36 +2,19 @@
 
 import asyncio
 import logging
-from typing import Annotated
 
 from autogen_core import SingleThreadedAgentRuntime
 
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
 from semantic_kernel.agents.orchestration.group_chat import GroupChatOrchestration, KernelFunctionGroupChatManager
-from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
 from semantic_kernel.connectors.ai.open_ai.services.open_ai_chat_completion import OpenAIChatCompletion
-from semantic_kernel.connectors.ai.prompt_execution_settings import PromptExecutionSettings
-from semantic_kernel.functions import kernel_function
-from semantic_kernel.functions.kernel_arguments import KernelArguments
+from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.kernel import Kernel
 
 logging.basicConfig(level=logging.WARNING)  # Set default level to WARNING
 logging.getLogger("semantic_kernel.agents.orchestration.group_chat").setLevel(
     logging.DEBUG
 )  # Enable DEBUG for group chat pattern
-
-
-class UserPlugin:
-    """A plugin that interacts with the user."""
-
-    @kernel_function(description="Request user for feedback.")
-    def request_for_feedback(
-        self,
-        request: Annotated[str, "The request to the user."],
-        full_content: Annotated[str, "The full content to show to the user."],
-    ) -> Annotated[str, "User's response."]:
-        """Request user for feedback."""
-        return input(f"{request}\n{full_content}\n> ")
 
 
 async def main():
@@ -51,36 +34,40 @@ async def main():
         ),
         service=OpenAIChatCompletion(),
     )
-    user_proxy = ChatCompletionAgent(
-        name="UserProxyAgent",
-        description="An agent that represents the user.",
-        instructions=(
-            "You represent the user in an autonomous workflow consisting multiple autonomous agents. "
-            "Relay user's feedback, requirements, and approvals back to the workflow by saying 'The user says: ...'."
-        ),
-        service=OpenAIChatCompletion(),
-        plugins=[UserPlugin()],
-        arguments=KernelArguments(
-            settings=PromptExecutionSettings(
-                function_choice_behavior=FunctionChoiceBehavior.Required(),
-            )
-        ),
-    )
+
+    async def user_input_function(chat_history: ChatHistory) -> str:
+        """Function to get user input.
+
+        This function simply finds the latest message from either the writer or editor agent and ask for user input.
+        """
+        for message in chat_history.messages[::-1]:
+            if message.name == writer_agent.name:
+                print(f"Here is the draft from {writer_agent.name}:")
+                print(message.content)
+                return input("What do you think? > ")
+
+        return "No messages from writer agent found."
 
     kernel: Kernel = Kernel(services=[OpenAIChatCompletion()])
-
     group_chat_pattern = GroupChatOrchestration(
-        manager=KernelFunctionGroupChatManager(kernel=kernel, max_rounds=10),
+        manager=KernelFunctionGroupChatManager(kernel=kernel, max_rounds=10, user_input_func=user_input_function),
         agents=[
             writer_agent,
             editor_agent,
-            user_proxy,
         ],
     )
-    await group_chat_pattern.start(
+
+    runtime = SingleThreadedAgentRuntime()
+    runtime.start()
+
+    result = await group_chat_pattern.invoke(
         task="Please write a short story about the gingerbread man.",
-        runtime=SingleThreadedAgentRuntime(),
+        runtime=runtime,
     )
+
+    await runtime.stop_when_idle()
+
+    print(result)
 
 
 if __name__ == "__main__":

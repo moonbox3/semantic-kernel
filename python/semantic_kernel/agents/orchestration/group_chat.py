@@ -3,16 +3,23 @@
 import asyncio
 import logging
 import sys
+import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from typing import ClassVar
 
-from autogen_core import MessageContext, SingleThreadedAgentRuntime, TopicId, TypeSubscription, message_handler
+from autogen_core import (
+    MessageContext,
+    RoutedAgent,
+    SingleThreadedAgentRuntime,
+    TopicId,
+    TypeSubscription,
+    message_handler,
+)
 from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent, AgentThread
 from semantic_kernel.agents.orchestration.container_base import ContainerBase
-from semantic_kernel.agents.orchestration.orchestration_base import OrchestrationBase
+from semantic_kernel.agents.orchestration.orchestration_base import OrchestrationBase, OrchestrationResultMessage
 from semantic_kernel.connectors.ai.prompt_execution_settings import PromptExecutionSettings
 from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
@@ -392,68 +399,68 @@ Read the above conversation. Then select the next role from {{$participants}} to
         )
 
 
-class GroupChatManagerContainer(GroupChatAgentContainer):
+class GroupChatManagerContainer(RoutedAgent):
     """A group chat manager container."""
-
-    manager: GroupChatManager
-
-    participant_descriptions: dict[str, str]
-    participant_topics: dict[str, str]
 
     def __init__(
         self,
         manager: GroupChatManager,
+        internal_topic_type: str,
         participant_descriptions: dict[str, str],
         participant_topics: dict[str, str],
-        **kwargs,
     ):
         """Initialize the group chat manager container."""
-        super().__init__(
-            manager=manager,
-            participant_descriptions=participant_descriptions,
-            participant_topics=participant_topics,
-            description="A container for the group chat manager.",
-            **kwargs,
-        )
+        self._manager = manager
+        self._internal_topic_type = internal_topic_type
+        self._chat_history = ChatHistory()
+        self._participant_descriptions = participant_descriptions
+        self._participant_topics = participant_topics
 
-    @override
+        super().__init__(description="A container for the group chat manager.")
+
     @message_handler
     async def _on_group_chat_message(self, message: GroupChatResponseMessage, ctx: MessageContext) -> None:
-        await super()._on_group_chat_message(message, ctx)
+        if message.body.role != AuthorRole.USER:
+            self._chat_history.add_message(
+                ChatMessageContent(
+                    role=AuthorRole.USER,
+                    content=f"Transferred to {message.body.name}",
+                )
+            )
+        self._chat_history.add_message(message.body)
 
-        should_request_user_input = await self.manager.should_request_user_input(self.chat_history)
-        if should_request_user_input and self.manager.user_input_func:
+        should_request_user_input = await self._manager.should_request_user_input(self._chat_history)
+        if should_request_user_input and self._manager.user_input_func:
             logger.debug(f"Group chat manager requested user input. Reason: {should_request_user_input.reason}")
-            user_input = await self.manager.user_input_func(self.chat_history)
+            user_input = await self._manager.user_input_func(self._chat_history)
             if user_input:
-                self.chat_history.add_message(ChatMessageContent(role=AuthorRole.USER, content=user_input))
+                self._chat_history.add_message(ChatMessageContent(role=AuthorRole.USER, content=user_input))
                 await self.publish_message(
                     GroupChatResponseMessage(body=ChatMessageContent(role=AuthorRole.USER, content=user_input)),
-                    TopicId(self.internal_topic_type, self.id.key),
+                    TopicId(self._internal_topic_type, self.id.key),
                 )
                 logger.debug("User input received and added to chat history.")
 
-        should_terminate = await self.manager.should_terminate(self.chat_history)
+        should_terminate = await self._manager.should_terminate(self._chat_history)
         if should_terminate:
             logger.debug(f"Group chat manager decided to terminate the group chat. Reason: {should_terminate.reason}")
-            # TODO(@taochen): Filter results and broadcast to external subscriber.
+            result = await self._manager.filter_results(self._chat_history)
+            await self.publish_message(
+                OrchestrationResultMessage(body=result),
+                TopicId(self._internal_topic_type, self.id.key),
+            )
             return
 
-        next_agent = await self.manager.select_next_agent(self.chat_history, self.participant_descriptions)
+        next_agent = await self._manager.select_next_agent(self._chat_history, self._participant_descriptions)
         logger.debug(
-            f"Group chat manager selected agent: {next_agent} on round {self.manager.current_round}. "
+            f"Group chat manager selected agent: {next_agent} on round {self._manager.current_round}. "
             f"Reason: {next_agent.reason}"
         )
 
         await self.publish_message(
             GroupChatRequestMessage(),
-            TopicId(self.participant_topics[str(next_agent)], self.id.key),
+            TopicId(self._participant_topics[str(next_agent)], self.id.key),
         )
-
-    @override
-    @message_handler
-    async def _on_request_to_speak(self, message: GroupChatRequestMessage, ctx: MessageContext) -> None:
-        raise RuntimeError("Group chat manager should not receive request to speak messages.")
 
 
 class GroupChatOrchestration(OrchestrationBase):
@@ -461,11 +468,22 @@ class GroupChatOrchestration(OrchestrationBase):
 
     manager: GroupChatManager
 
-    MANAGER_TYPE: ClassVar[str] = "group_chat_manager_container"
-
     @override
     async def _start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
         """Start the group chat pattern."""
+        group_manager_type = f"GroupManager_{uuid.uuid4().hex}"
+        await GroupChatManagerContainer.register(
+            runtime,
+            group_manager_type,
+            lambda: GroupChatManagerContainer(
+                manager=self.manager,
+                internal_topic_type=self.internal_topic_type,
+                participant_descriptions={agent.name: agent.description for agent in self.agents},
+                participant_topics={agent.name: self._get_container_topic(agent) for agent in self.agents},
+            ),
+        )
+        await runtime.add_subscription(TypeSubscription(self.internal_topic_type, group_manager_type))
+
         message = ChatMessageContent(AuthorRole.USER, content=task, name="User")
 
         await runtime.publish_message(
@@ -488,16 +506,6 @@ class GroupChatOrchestration(OrchestrationBase):
             )
             for agent in self.agents
         ])
-        await GroupChatManagerContainer.register(
-            runtime,
-            self.MANAGER_TYPE,
-            lambda: GroupChatManagerContainer(
-                manager=self.manager,
-                participant_descriptions={agent.name: agent.description for agent in self.agents},
-                participant_topics={agent.name: self._get_container_topic(agent) for agent in self.agents},
-                internal_topic_type=self.internal_topic_type,
-            ),
-        )
 
     @override
     async def _add_subscriptions(self, runtime: SingleThreadedAgentRuntime) -> None:
@@ -507,7 +515,6 @@ class GroupChatOrchestration(OrchestrationBase):
             subscriptions.append(TypeSubscription(self.internal_topic_type, self._get_container_type(agent)))
             subscriptions.append(TypeSubscription(self._get_container_topic(agent), self._get_container_type(agent)))
         await asyncio.gather(*[runtime.add_subscription(sub) for sub in subscriptions])
-        await runtime.add_subscription(TypeSubscription(self.internal_topic_type, self.MANAGER_TYPE))
 
     def _get_container_type(self, agent: Agent) -> str:
         """Get the container type for an agent."""
