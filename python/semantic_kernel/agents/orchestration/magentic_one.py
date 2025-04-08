@@ -5,7 +5,7 @@ import logging
 import sys
 from typing import ClassVar
 
-from autogen_core import AgentId, MessageContext, SingleThreadedAgentRuntime, TopicId, TypeSubscription, message_handler
+from autogen_core import AgentId, AgentRuntime, MessageContext, TopicId, TypeSubscription, message_handler
 from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent
@@ -323,7 +323,7 @@ class MagenticOneOrchestration(OrchestrationBase):
     MANAGER_TYPE: ClassVar[str] = "magentic_one_manager_container"
 
     @override
-    async def _start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
+    async def _start(self, task: str, runtime: AgentRuntime) -> None:
         """Start the Magentic One pattern."""
         await runtime.publish_message(
             TaskStartMessage(body=task),
@@ -331,7 +331,7 @@ class MagenticOneOrchestration(OrchestrationBase):
         )
 
     @override
-    async def _register_agents(self, runtime: SingleThreadedAgentRuntime) -> None:
+    async def _register_agents(self, runtime: AgentRuntime) -> None:
         """Register the agents."""
         await asyncio.gather(*[
             GroupChatAgentContainer.register(
@@ -352,7 +352,7 @@ class MagenticOneOrchestration(OrchestrationBase):
         )
 
     @override
-    async def _add_subscriptions(self, runtime: SingleThreadedAgentRuntime) -> None:
+    async def _add_subscriptions(self, runtime: AgentRuntime) -> None:
         """Add subscriptions."""
         subscriptions: list[TypeSubscription] = []
         for agent in self.agents:

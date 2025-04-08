@@ -5,14 +5,7 @@ import logging
 import sys
 import uuid
 
-from autogen_core import (
-    MessageContext,
-    RoutedAgent,
-    SingleThreadedAgentRuntime,
-    TopicId,
-    TypeSubscription,
-    message_handler,
-)
+from autogen_core import AgentRuntime, MessageContext, RoutedAgent, TopicId, TypeSubscription, message_handler
 
 from semantic_kernel.agents.agent import Agent
 from semantic_kernel.agents.orchestration.container_base import ContainerBase
@@ -82,7 +75,7 @@ class SequentialOrchestration(OrchestrationBase):
     """A sequential multi-agent pattern orchestration."""
 
     @override
-    async def _start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
+    async def _start(self, task: str, runtime: AgentRuntime) -> None:
         """Start the sequential pattern."""
         collection_agent_type = f"Collection_{uuid.uuid4().hex}"
         await CollectionAgent.register(
@@ -102,7 +95,7 @@ class SequentialOrchestration(OrchestrationBase):
         )
 
     @override
-    async def _register_agents(self, runtime: SingleThreadedAgentRuntime) -> None:
+    async def _register_agents(self, runtime: AgentRuntime) -> None:
         """Register the agents."""
         await asyncio.gather(*[
             SequentialAgentContainer.register(
@@ -119,7 +112,7 @@ class SequentialOrchestration(OrchestrationBase):
         ])
 
     @override
-    async def _add_subscriptions(self, runtime: SingleThreadedAgentRuntime) -> None:
+    async def _add_subscriptions(self, runtime: AgentRuntime) -> None:
         """Add subscriptions."""
         await asyncio.gather(*[
             runtime.add_subscription(

@@ -7,14 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any, Union
 
-from autogen_core import (
-    MessageContext,
-    RoutedAgent,
-    SingleThreadedAgentRuntime,
-    TopicId,
-    TypeSubscription,
-    message_handler,
-)
+from autogen_core import AgentRuntime, MessageContext, RoutedAgent, TopicId, TypeSubscription, message_handler
 from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent
@@ -95,7 +88,7 @@ class OrchestrationBase(KernelBaseModel, ABC):
     async def invoke(
         self,
         task: str,
-        runtime: SingleThreadedAgentRuntime,
+        runtime: AgentRuntime,
         time_out: int | None = None,
     ) -> Any:
         """Invoke the multi-agent orchestration and return the result.
@@ -108,7 +101,7 @@ class OrchestrationBase(KernelBaseModel, ABC):
 
         Args:
             task (str): The task to be executed by the agents.
-            runtime (SingleThreadedAgentRuntime): The runtime environment for the agents.
+            runtime (AgentRuntime): The runtime environment for the agents.
             time_out (int | None): The timeout (seconds) for the orchestration. If None, wait indefinitely.
         """
         orchestration_result: Any = None
@@ -118,11 +111,6 @@ class OrchestrationBase(KernelBaseModel, ABC):
             nonlocal orchestration_result
             orchestration_result = result
             orchestration_result_event.set()
-
-        try:
-            runtime.start()
-        except Exception:
-            logger.warning("Runtime is already started outside of the pattern.")
 
         # Register an OrchestrationAgent to handle the result
         orchestration_agent_type = uuid.uuid4().hex
@@ -150,7 +138,7 @@ class OrchestrationBase(KernelBaseModel, ABC):
             raise RuntimeError("Orchestration result is None.")
         return orchestration_result
 
-    async def start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
+    async def start(self, task: str, runtime: AgentRuntime) -> None:
         """Start the multi-agent orchestration.
 
         This is different from the `invoke` method, where the result is returned directly.
@@ -158,11 +146,6 @@ class OrchestrationBase(KernelBaseModel, ABC):
         This method returns immediately and clients need to wait for the orchestration
         result by subscribing to the external topic.
         """
-        try:
-            runtime.start()
-        except Exception:
-            logger.warning("Runtime is already started outside of the pattern.")
-
         # Register an OrchestrationAgent to handle the result
         orchestration_agent_type = uuid.uuid4().hex
         await OrchestrationAgent.register(
@@ -180,16 +163,16 @@ class OrchestrationBase(KernelBaseModel, ABC):
         await self._start(task, runtime)
 
     @abstractmethod
-    async def _start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
+    async def _start(self, task: str, runtime: AgentRuntime) -> None:
         """Start the multi-agent orchestration."""
         pass
 
     @abstractmethod
-    async def _register_agents(self, runtime: SingleThreadedAgentRuntime) -> None:
+    async def _register_agents(self, runtime: AgentRuntime) -> None:
         """Register the agents."""
         pass
 
     @abstractmethod
-    async def _add_subscriptions(self, runtime: SingleThreadedAgentRuntime) -> None:
+    async def _add_subscriptions(self, runtime: AgentRuntime) -> None:
         """Add subscriptions."""
         pass

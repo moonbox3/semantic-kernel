@@ -7,14 +7,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 
-from autogen_core import (
-    MessageContext,
-    RoutedAgent,
-    SingleThreadedAgentRuntime,
-    TopicId,
-    TypeSubscription,
-    message_handler,
-)
+from autogen_core import AgentRuntime, MessageContext, RoutedAgent, TopicId, TypeSubscription, message_handler
 from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent, AgentThread
@@ -469,7 +462,7 @@ class GroupChatOrchestration(OrchestrationBase):
     manager: GroupChatManager
 
     @override
-    async def _start(self, task: str, runtime: SingleThreadedAgentRuntime) -> None:
+    async def _start(self, task: str, runtime: AgentRuntime) -> None:
         """Start the group chat pattern."""
         group_manager_type = f"GroupManager_{uuid.uuid4().hex}"
         await GroupChatManagerContainer.register(
@@ -492,7 +485,7 @@ class GroupChatOrchestration(OrchestrationBase):
         )
 
     @override
-    async def _register_agents(self, runtime: SingleThreadedAgentRuntime) -> None:
+    async def _register_agents(self, runtime: AgentRuntime) -> None:
         """Register the agents."""
         await asyncio.gather(*[
             GroupChatAgentContainer.register(
@@ -508,7 +501,7 @@ class GroupChatOrchestration(OrchestrationBase):
         ])
 
     @override
-    async def _add_subscriptions(self, runtime: SingleThreadedAgentRuntime) -> None:
+    async def _add_subscriptions(self, runtime: AgentRuntime) -> None:
         """Add subscriptions."""
         subscriptions: list[TypeSubscription] = []
         for agent in self.agents:
