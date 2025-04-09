@@ -55,10 +55,6 @@ class OrchestrationAgent(RoutedAgent):
         self, message: OrchestrationResultMessage, ctx: MessageContext
     ) -> None:
         """Handle the orchestration result message."""
-        if ctx.topic_id.type != self._internal_topic_type:
-            # Message is not from this orchestration instance
-            return
-
         # Simply route the message to the external topic
         if self._external_topic_type:
             await self.publish_message(message, TopicId(self._external_topic_type, self.id.key))
@@ -71,18 +67,20 @@ class OrchestrationAgent(RoutedAgent):
 class OrchestrationBase(KernelBaseModel, ABC):
     """Base class for multi-agent orchestration."""
 
+    name: str = Field(
+        default=__name__,
+        description="The name of this orchestration instance.",
+    )
+    description: str = Field(
+        default="A multi-agent orchestration instance.",
+        description="The description of this orchestration instance.",
+    )
+
     agents: list[Union[Agent, "OrchestrationBase"]] = Field(default_factory=list)
 
     internal_topic_type: str = Field(
         default_factory=lambda: uuid.uuid4().hex,
         description="The unique and internal topic type of this orchestration instance.",
-    )
-    external_topic_type: str | None = Field(
-        default=None,
-        description=(
-            "The unique and external topic type of this orchestration instance. "
-            "If None, the orchestration result will not be published to any external topic."
-        ),
     )
 
     async def invoke(
@@ -112,20 +110,10 @@ class OrchestrationBase(KernelBaseModel, ABC):
             orchestration_result = result
             orchestration_result_event.set()
 
-        # Register an OrchestrationAgent to handle the result
-        orchestration_agent_type = uuid.uuid4().hex
-        await OrchestrationAgent.register(
-            runtime,
-            orchestration_agent_type,
-            lambda: OrchestrationAgent(
-                internal_topic_type=self.internal_topic_type,
-                result_trigger_func=result_trigger_func,
-            ),
-        )
-        await runtime.add_subscription(TypeSubscription(self.internal_topic_type, orchestration_agent_type))
+        # This unique ID is used to isolate the orchestration run from others.
+        unique_registration_id = uuid.uuid4().hex
 
-        await self._register_agents(runtime)
-        await self._add_subscriptions(runtime)
+        await self.register(runtime, unique_registration_id, result_trigger_func=result_trigger_func)
         await self._start(task, runtime)
 
         # Wait for the orchestration result
@@ -146,21 +134,44 @@ class OrchestrationBase(KernelBaseModel, ABC):
         This method returns immediately and clients need to wait for the orchestration
         result by subscribing to the external topic.
         """
-        # Register an OrchestrationAgent to handle the result
-        orchestration_agent_type = uuid.uuid4().hex
+        # This unique ID is used to isolate the orchestration run from others.
+        unique_registration_id = uuid.uuid4().hex
+
+        await self.register(runtime, unique_registration_id)
+        await self._start(task, runtime)
+
+    async def register(
+        self,
+        runtime: AgentRuntime,
+        unique_registration_id: str,
+        external_topic_type: str | None = None,
+        result_trigger_func: Callable[[Any], None] | None = None,
+    ) -> None:
+        """Registers the orchestration instance with the runtime."""
         await OrchestrationAgent.register(
             runtime,
-            orchestration_agent_type,
+            self._get_orchestration_agent_type(unique_registration_id),
             lambda: OrchestrationAgent(
                 internal_topic_type=self.internal_topic_type,
-                external_topic_type=self.external_topic_type,
+                external_topic_type=external_topic_type,
+                result_trigger_func=result_trigger_func,
             ),
         )
-        await runtime.add_subscription(TypeSubscription(self.internal_topic_type, orchestration_agent_type))
+        await runtime.add_subscription(
+            TypeSubscription(
+                self.internal_topic_type,
+                self._get_orchestration_agent_type(unique_registration_id),
+            )
+        )
+        await runtime.add_subscription(
+            TypeSubscription(
+                external_topic_type,
+                self._get_orchestration_agent_type(unique_registration_id),
+            )
+        )
 
-        await self._register_agents(runtime)
-        await self._add_subscriptions(runtime)
-        await self._start(task, runtime)
+        await self._register_agents(runtime, unique_registration_id)
+        await self._add_subscriptions(runtime, unique_registration_id)
 
     @abstractmethod
     async def _start(self, task: str, runtime: AgentRuntime) -> None:
@@ -168,11 +179,15 @@ class OrchestrationBase(KernelBaseModel, ABC):
         pass
 
     @abstractmethod
-    async def _register_agents(self, runtime: AgentRuntime) -> None:
+    async def _register_agents(self, runtime: AgentRuntime, unique_registration_id: str) -> None:
         """Register the agents."""
         pass
 
     @abstractmethod
-    async def _add_subscriptions(self, runtime: AgentRuntime) -> None:
+    async def _add_subscriptions(self, runtime: AgentRuntime, unique_registration_id: str) -> None:
         """Add subscriptions."""
         pass
+
+    def _get_orchestration_agent_type(self, unique_registration_id: str) -> str:
+        """Get the collection agent type."""
+        return f"{OrchestrationAgent.__name__}_{unique_registration_id}"

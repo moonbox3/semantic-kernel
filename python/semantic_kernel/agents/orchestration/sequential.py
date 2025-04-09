@@ -3,13 +3,16 @@
 import asyncio
 import logging
 import sys
-import uuid
 
-from autogen_core import AgentRuntime, MessageContext, RoutedAgent, TopicId, TypeSubscription, message_handler
+from autogen_core import AgentId, AgentRuntime, MessageContext, RoutedAgent, TopicId, TypeSubscription, message_handler
 
 from semantic_kernel.agents.agent import Agent
 from semantic_kernel.agents.orchestration.container_base import ContainerBase
-from semantic_kernel.agents.orchestration.orchestration_base import OrchestrationBase, OrchestrationResultMessage
+from semantic_kernel.agents.orchestration.orchestration_base import (
+    OrchestrationAgent,
+    OrchestrationBase,
+    OrchestrationResultMessage,
+)
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from semantic_kernel.kernel_pydantic import KernelBaseModel
@@ -58,16 +61,18 @@ class SequentialAgentContainer(ContainerBase):
 class CollectionAgent(RoutedAgent):
     """A agent container for collection results from the last agent in the sequence."""
 
-    def __init__(self, description: str, internal_topic_type: str) -> None:
+    def __init__(self, description: str) -> None:
         """Initialize the collection agent container."""
-        self._internal_topic_type = internal_topic_type
         super().__init__(description=description)
 
     @message_handler
     async def _handle_message(self, message: SequentialRequestMessage, ctx: MessageContext) -> None:
-        await self.publish_message(
+        await self.send_message(
             OrchestrationResultMessage(body=message.body),
-            TopicId(self._internal_topic_type, self.id.key),
+            AgentId(
+                type=OrchestrationAgent.__name__,
+                key="default",
+            ),
         )
 
 
@@ -77,16 +82,14 @@ class SequentialOrchestration(OrchestrationBase):
     @override
     async def _start(self, task: str, runtime: AgentRuntime) -> None:
         """Start the sequential pattern."""
-        collection_agent_type = f"Collection_{uuid.uuid4().hex}"
         await CollectionAgent.register(
             runtime,
-            collection_agent_type,
+            CollectionAgent.__name__,
             lambda: CollectionAgent(
                 description="An internal agent that is responsible for collection results",
                 internal_topic_type=self.internal_topic_type,
             ),
         )
-        await runtime.add_subscription(TypeSubscription(self._get_collection_agent_topic(), collection_agent_type))
 
         message = ChatMessageContent(AuthorRole.USER, content=task)
         await runtime.publish_message(
