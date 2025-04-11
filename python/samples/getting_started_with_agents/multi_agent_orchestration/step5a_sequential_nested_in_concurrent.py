@@ -42,13 +42,13 @@ def get_sequential_orchestration(expert_agent: Agent, target_language: str) -> S
     # message type of the sequential orchestration.
     # We also we need to trasnsition the output of the sequential orchestration to the output
     # of the concurrent actor.
-    async def input_transition_func(concurrent_input: ConcurrentRequestMessage) -> SequentialRequestMessage:
+    def input_transition_func(concurrent_input: ConcurrentRequestMessage) -> SequentialRequestMessage:
         # Convert the concurrent input to a sequential input message.
         return SequentialRequestMessage(
             body=concurrent_input.body,
         )
 
-    async def output_transition_func(sequential_output: SequentialResultMessage) -> ConcurrentResponseMessage:
+    def output_transition_func(sequential_output: SequentialResultMessage) -> ConcurrentResponseMessage:
         # Convert the sequential output to a concurrent response message.
         return ConcurrentResponseMessage(
             body=sequential_output.body,

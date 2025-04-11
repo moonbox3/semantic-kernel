@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft. All rights reserved.
 
 import asyncio
+import inspect
 import logging
 import sys
 from collections.abc import Awaitable, Callable
@@ -62,8 +63,11 @@ class ConcurrentOrchestrationActor(
         if isinstance(message, ConcurrentRequestMessage):
             await self._handle_orchestration_input_message(message, ctx)
         elif isinstance(message, self._external_input_message_type):
-            message: ConcurrentRequestMessage = await self._input_transition(message)
-            await self._handle_orchestration_input_message(message, ctx)
+            if inspect.isawaitable(self._input_transition):
+                transition_message: ConcurrentRequestMessage = await self._input_transition(message)
+            else:
+                transition_message = self._input_transition(message)
+            await self._handle_orchestration_input_message(transition_message, ctx)
         elif isinstance(message, ConcurrentResultMessage):
             await self._handle_orchestration_output_message(message, ctx)
         else:
@@ -74,7 +78,8 @@ class ConcurrentOrchestrationActor(
     @override
     async def _handle_orchestration_input_message(
         self,
-        message: ConcurrentRequestMessage,
+        # The following does not validate LSP because Python doesn't recognize the generic type
+        message: ConcurrentRequestMessage,  # type: ignore
         ctx: MessageContext,
     ) -> None:
         logger.debug(f"{self.id}: Received orchestration input message.")
@@ -88,7 +93,11 @@ class ConcurrentOrchestrationActor(
         ctx: MessageContext,
     ) -> None:
         logger.debug(f"{self.id}: Received orchestration output message.")
-        external_output_message = await self._output_transition(message)
+
+        if inspect.isawaitable(self._output_transition):
+            external_output_message = await self._output_transition(message)
+        else:
+            external_output_message = self._output_transition(message)
 
         if self._external_topic_type:
             logger.debug(f"Relaying message to external topic: {self._external_topic_type}")
@@ -109,10 +118,10 @@ class ConcurrentOrchestrationActor(
 class ConcurrentAgentActor(AgentActorBase):
     """A agent actor for concurrent agents that process tasks."""
 
-    def __init__(self, agent: Agent, collection_agent_type: str, **kwargs) -> None:
+    def __init__(self, agent: Agent, collection_agent_type: str) -> None:
         """Initialize the agent actor."""
         self._collection_agent_type = collection_agent_type
-        super().__init__(agent=agent, **kwargs)
+        super().__init__(agent=agent)
 
     @message_handler
     async def _handle_message(self, message: ConcurrentRequestMessage, ctx: MessageContext) -> None:
@@ -140,13 +149,14 @@ class CollectionActor(RoutedAgent):
         self._expected_answer_count = expected_answer_count
         self._orchestration_actor_type = orchestration_actor_type
         self._results: dict[str, ChatMessageContent] = {}
+        self._lock = asyncio.Lock()
 
         super().__init__(description=description)
 
     @message_handler
     async def _handle_message(self, message: ConcurrentResponseMessage, ctx: MessageContext) -> None:
-        # TODO(@taochen): Make this thread-safe
-        self._results[f"{ctx.sender.type}_{ctx.sender.key}"] = message.body
+        async with self._lock:
+            self._results[f"{ctx.sender.type}_{ctx.sender.key}"] = message.body
 
         if len(self._results) == self._expected_answer_count:
             logger.debug(f"Collection actor (Actor ID: {self.id}) finished processing all responses.")
@@ -172,7 +182,7 @@ class ConcurrentOrchestration(
     def __init__(
         self,
         workers: list[Agent | OrchestrationBase],
-        external_input_message_type: type[TExternalInputMessage] = ConcurrentRequestMessage,
+        external_input_message_type: type[TExternalInputMessage] = ConcurrentRequestMessage,  # type: ignore[assignment]
         name: str | None = None,
         description: str | None = None,
         input_transition: Callable[[TExternalInputMessage], Awaitable[ConcurrentRequestMessage]] | None = None,
@@ -281,7 +291,7 @@ class ConcurrentOrchestration(
                 await ConcurrentAgentActor.register(
                     runtime,
                     self._get_agent_actor_type(worker, internal_topic_type),
-                    lambda agent=worker: ConcurrentAgentActor(
+                    lambda agent=worker: ConcurrentAgentActor(  # type: ignore[misc]
                         agent,
                         collection_agent_type=self._get_collection_actor_type(internal_topic_type),
                     ),

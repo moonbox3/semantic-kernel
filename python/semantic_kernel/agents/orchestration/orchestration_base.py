@@ -5,7 +5,7 @@ import logging
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from typing import Any, Generic, TypeVar, Union
+from typing import Any, Generic, TypeVar, Union, cast
 
 from autogen_core import AgentRuntime, BaseAgent, MessageContext
 
@@ -40,8 +40,12 @@ class OrchestrationActorBase(
         external_input_message_type: type[TExternalInputMessage],
         external_topic_type: str | None = None,
         direct_actor_type: str | None = None,
-        input_transition: Callable[[TExternalInputMessage], Awaitable[TInternalInputMessage]] | None = None,
-        output_transition: Callable[[TInternalOutputMessage], Awaitable[TExternalOutputMessage]] | None = None,
+        input_transition: Callable[[TExternalInputMessage], Awaitable[TInternalInputMessage] | TInternalInputMessage]
+        | None = None,
+        output_transition: Callable[
+            [TInternalOutputMessage], Awaitable[TExternalOutputMessage] | TExternalOutputMessage
+        ]
+        | None = None,
         result_callback: Callable[[TExternalOutputMessage], None] | None = None,
     ) -> None:
         """Initialize the orchestration agent.
@@ -52,9 +56,9 @@ class OrchestrationActorBase(
                 This is for dynamic type checking.
             external_topic_type (str | None): The external topic type for the orchestration.
             direct_actor_type (str | None): The direct actor type for which this actor will relay the output message to.
-            input_transition (Callable[[TExternalInputMessage], Awaitable[TInternalInputMessage]] | None):
+            input_transition (Callable | None):
                 A function that transforms the external input message to the internal input message.
-            output_transition (Callable[[TInternalOutputMessage], Awaitable[TExternalOutputMessage]] | None):
+            output_transition (Callable | None):
                 A function that transforms the internal output message to the external output message.
             result_callback: A function that is called when the result is available.
         """
@@ -67,21 +71,21 @@ class OrchestrationActorBase(
 
         if input_transition is None:
 
-            async def input_transition_func(input: TExternalInputMessage) -> TInternalInputMessage:  # noqa: RUF029
-                return input
+            def input_transition_func(input_message: TExternalInputMessage) -> TInternalInputMessage:
+                return cast(TInternalInputMessage, input_message)
 
             self._input_transition = input_transition_func
         else:
-            self._input_transition = input_transition
+            self._input_transition = input_transition  # type: ignore[assignment]
 
         if output_transition is None:
 
-            async def output_transition_func(output: TInternalOutputMessage) -> TExternalOutputMessage:  # noqa: RUF029
-                return output
+            def output_transition_func(output_message: TInternalOutputMessage) -> TExternalOutputMessage:
+                return cast(TExternalOutputMessage, output_message)
 
             self._output_transition = output_transition_func
         else:
-            self._output_transition = output_transition
+            self._output_transition = output_transition  # type: ignore[assignment]
 
         super().__init__(description="Orchestration Agent")
 
@@ -121,8 +125,12 @@ class OrchestrationBase(
         external_input_message_type: type[TExternalInputMessage],
         name: str | None = None,
         description: str | None = None,
-        input_transition: Callable[[TExternalInputMessage], Awaitable[TInternalInputMessage]] | None = None,
-        output_transition: Callable[[TInternalOutputMessage], Awaitable[TExternalOutputMessage]] | None = None,
+        input_transition: Callable[[TExternalInputMessage], Awaitable[TInternalInputMessage] | TInternalInputMessage]
+        | None = None,
+        output_transition: Callable[
+            [TInternalOutputMessage], Awaitable[TExternalOutputMessage] | TExternalOutputMessage
+        ]
+        | None = None,
     ) -> None:
         """Initialize the orchestration base.
 
@@ -132,9 +140,9 @@ class OrchestrationBase(
                 This is for dynamic type checking.
             name (str | None): A unique name of the orchestration. If None, a unique name will be generated.
             description (str | None): The description of the orchestration. If None, use a default description.
-            input_transition (Callable[[TExternalInputMessage], Awaitable[TInternalInputMessage]] | None):
+            input_transition (Callable | None):
                 A function that transforms the external input message to the internal input message.
-            output_transition (Callable[[TInternalOutputMessage], Awaitable[TExternalOutputMessage]] | None):
+            output_transition (Callable | None):
                 A function that transforms the internal output message to the external output message.
         """
         self.name = name or f"{self.__class__.__name__}_{uuid.uuid4().hex}"
@@ -241,7 +249,7 @@ class OrchestrationBase(
         external_topic_type: str | None = None,
         direct_actor_type: str | None = None,
         result_callback: Callable[[TExternalOutputMessage], None] | None = None,
-    ) -> None:
+    ) -> str:
         """Register the actors and orchestrations with the runtime and add the required subscriptions.
 
         Args:

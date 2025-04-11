@@ -9,7 +9,7 @@ from semantic_kernel.agents.agent import Agent
 class AgentActorBase(RoutedAgent):
     """A agent actor for multi-agent orchestration running on Agent runtime."""
 
-    def __init__(self, agent: Agent, **kwargs) -> None:
+    def __init__(self, agent: Agent) -> None:
         """Initialize the agent container.
 
         Args:
@@ -18,4 +18,4 @@ class AgentActorBase(RoutedAgent):
         """
         self._agent = agent
 
-        RoutedAgent.__init__(self, description=agent.description)
+        RoutedAgent.__init__(self, description=agent.description or "Semantic Kernel Agent")

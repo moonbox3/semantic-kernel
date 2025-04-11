@@ -63,13 +63,13 @@ def get_expert_concurrent_orchestration() -> ConcurrentOrchestration[SequentialR
     # message type of the concurrent orchestration.
     # We also we need to trasnsition the output of the concurrent orchestration to the output
     # of a sequential actor, which is also a SequentialRequestMessage.
-    async def input_transition_func(sequential_input: SequentialRequestMessage) -> ConcurrentRequestMessage:
+    def input_transition_func(sequential_input: SequentialRequestMessage) -> ConcurrentRequestMessage:
         # Convert the sequential input to a concurrent input message.
         return ConcurrentRequestMessage(
             body=sequential_input.body,
         )
 
-    async def output_transition_func(concurrent_output: ConcurrentResultMessage) -> SequentialRequestMessage:
+    def output_transition_func(concurrent_output: ConcurrentResultMessage) -> SequentialRequestMessage:
         # Convert the concurrent output to a sequential response message.
         return SequentialRequestMessage(
             body=ChatMessageContent(
@@ -118,13 +118,13 @@ def get_mermaid_concurrent_orchestration() -> ConcurrentOrchestration[
     # message type of the concurrent orchestration.
     # We also we need to trasnsition the output of the concurrent orchestration to the output
     # of the sequential actor.
-    async def input_transition_func(sequential_input: SequentialRequestMessage) -> ConcurrentRequestMessage:
+    def input_transition_func(sequential_input: SequentialRequestMessage) -> ConcurrentRequestMessage:
         # Convert the sequential input to a concurrent input message.
         return ConcurrentRequestMessage(
             body=sequential_input.body,
         )
 
-    async def output_transition_func(concurrent_output: ConcurrentResultMessage) -> SequentialRequestMessage:
+    def output_transition_func(concurrent_output: ConcurrentResultMessage) -> SequentialRequestMessage:
         # Convert the concurrent output to a sequential response message.
         return SequentialRequestMessage(
             body=ChatMessageContent(
