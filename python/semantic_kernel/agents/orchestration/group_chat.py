@@ -11,7 +11,7 @@ from autogen_core import AgentRuntime, MessageContext, RoutedAgent, TopicId, Typ
 from pydantic import Field
 
 from semantic_kernel.agents.agent import Agent, AgentThread
-from semantic_kernel.agents.orchestration.container_base import ContainerBase
+from semantic_kernel.agents.orchestration.agent_actor_base import ContainerBase
 from semantic_kernel.agents.orchestration.orchestration_base import OrchestrationBase, OrchestrationResultMessage
 from semantic_kernel.connectors.ai.prompt_execution_settings import PromptExecutionSettings
 from semantic_kernel.contents.chat_history import ChatHistory

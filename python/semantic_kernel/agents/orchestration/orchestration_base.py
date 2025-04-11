@@ -4,98 +4,158 @@ import asyncio
 import logging
 import uuid
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from typing import Any, Union
+from collections.abc import Awaitable, Callable
+from typing import Any, Generic, TypeVar, Union
 
-from autogen_core import AgentRuntime, MessageContext, RoutedAgent, TopicId, TypeSubscription, message_handler
-from pydantic import Field
+from autogen_core import AgentRuntime, BaseAgent, MessageContext
 
 from semantic_kernel.agents.agent import Agent
-from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-class OrchestrationStartMessage(KernelBaseModel):
-    """A orchestration start message type that kicks off the multi-agent orchestration."""
-
-    pass
-
-
-class OrchestrationResultMessage(KernelBaseModel):
-    """A orchestration result message type that contains the result of the multi-agent orchestration."""
-
-    body: Any
+TInternalInputMessage = TypeVar("TInternalInputMessage")
+TInternalOutputMessage = TypeVar("TInternalOutputMessage")
+TExternalInputMessage = TypeVar("TExternalInputMessage")
+TExternalOutputMessage = TypeVar("TExternalOutputMessage")
 
 
-class OrchestrationAgent(RoutedAgent):
-    """An agent that is part of the orchestration that is responsible for publishing the result to external topics."""
+class OrchestrationActorBase(
+    BaseAgent,
+    Generic[
+        TExternalInputMessage,
+        TInternalInputMessage,
+        TInternalOutputMessage,
+        TExternalOutputMessage,
+    ],
+):
+    """An orchestrator actor that is part of the orchestration.
+
+    This actor is responsible for relaying external messages to the internal topic or actor and vice versa.
+    """
 
     def __init__(
         self,
         internal_topic_type: str,
+        external_input_message_type: type[TExternalInputMessage],
         external_topic_type: str | None = None,
-        result_trigger_func: Callable[[Any], None] | None = None,
+        direct_actor_type: str | None = None,
+        input_transition: Callable[[TExternalInputMessage], Awaitable[TInternalInputMessage]] | None = None,
+        output_transition: Callable[[TInternalOutputMessage], Awaitable[TExternalOutputMessage]] | None = None,
+        result_callback: Callable[[TExternalOutputMessage], None] | None = None,
     ) -> None:
         """Initialize the orchestration agent.
 
         Args:
-            internal_topic_type (str): The unique and internal topic type of this orchestration instance.
-            external_topic_type (str | None): The unique and external topic type of this orchestration instance.
-            result_trigger_func (Callable[[Any], Awaitable[None]] | None): A function that is called when the result is
-                                                                           available.
+            internal_topic_type (str): The internal topic type for the orchestration that this actor is part of.
+            external_input_message_type (type[TExternalInputMessage]): The type of the external input message.
+                This is for dynamic type checking.
+            external_topic_type (str | None): The external topic type for the orchestration.
+            direct_actor_type (str | None): The direct actor type for which this actor will relay the output message to.
+            input_transition (Callable[[TExternalInputMessage], Awaitable[TInternalInputMessage]] | None):
+                A function that transforms the external input message to the internal input message.
+            output_transition (Callable[[TInternalOutputMessage], Awaitable[TExternalOutputMessage]] | None):
+                A function that transforms the internal output message to the external output message.
+            result_callback: A function that is called when the result is available.
         """
         self._internal_topic_type = internal_topic_type
+        self._external_input_message_type = external_input_message_type
+
         self._external_topic_type = external_topic_type
-        self._result_trigger_func = result_trigger_func
+        self._direct_actor_type = direct_actor_type
+        self._result_callback = result_callback
+
+        if input_transition is None:
+
+            async def input_transition_func(input: TExternalInputMessage) -> TInternalInputMessage:  # noqa: RUF029
+                return input
+
+            self._input_transition = input_transition_func
+        else:
+            self._input_transition = input_transition
+
+        if output_transition is None:
+
+            async def output_transition_func(output: TInternalOutputMessage) -> TExternalOutputMessage:  # noqa: RUF029
+                return output
+
+            self._output_transition = output_transition_func
+        else:
+            self._output_transition = output_transition
+
         super().__init__(description="Orchestration Agent")
 
-    @message_handler
-    async def _handle_orchestration_result_message(
-        self, message: OrchestrationResultMessage, ctx: MessageContext
+    @abstractmethod
+    async def _handle_orchestration_input_message(
+        self,
+        message: TExternalInputMessage,
+        ctx: MessageContext,
     ) -> None:
-        """Handle the orchestration result message."""
-        # Simply route the message to the external topic
-        if self._external_topic_type:
-            await self.publish_message(message, TopicId(self._external_topic_type, self.id.key))
+        """Handle the orchestration input message."""
+        pass
 
-        # Call the result trigger function if provided
-        if self._result_trigger_func:
-            self._result_trigger_func(message.body)
+    @abstractmethod
+    async def _handle_orchestration_output_message(
+        self,
+        message: TInternalOutputMessage,
+        ctx: MessageContext,
+    ) -> None:
+        """Handle the orchestration output message."""
+        pass
 
 
-class OrchestrationBase(KernelBaseModel, ABC):
+class OrchestrationBase(
+    ABC,
+    Generic[
+        TExternalInputMessage,
+        TInternalInputMessage,
+        TInternalOutputMessage,
+        TExternalOutputMessage,
+    ],
+):
     """Base class for multi-agent orchestration."""
 
-    name: str = Field(
-        default=__name__,
-        description="The name of this orchestration instance.",
-    )
-    description: str = Field(
-        default="A multi-agent orchestration instance.",
-        description="The description of this orchestration instance.",
-    )
+    def __init__(
+        self,
+        workers: list[Union[Agent, "OrchestrationBase"]],
+        external_input_message_type: type[TExternalInputMessage],
+        name: str | None = None,
+        description: str | None = None,
+        input_transition: Callable[[TExternalInputMessage], Awaitable[TInternalInputMessage]] | None = None,
+        output_transition: Callable[[TInternalOutputMessage], Awaitable[TExternalOutputMessage]] | None = None,
+    ) -> None:
+        """Initialize the orchestration base.
 
-    agents: list[Union[Agent, "OrchestrationBase"]] = Field(default_factory=list)
+        Args:
+            workers (list[Union[Agent, OrchestrationBase]]): The list of agents or orchestrations to be used.
+            external_input_message_type (type[TExternalInputMessage]): The type of the external input message.
+                This is for dynamic type checking.
+            name (str | None): A unique name of the orchestration. If None, a unique name will be generated.
+            description (str | None): The description of the orchestration. If None, use a default description.
+            input_transition (Callable[[TExternalInputMessage], Awaitable[TInternalInputMessage]] | None):
+                A function that transforms the external input message to the internal input message.
+            output_transition (Callable[[TInternalOutputMessage], Awaitable[TExternalOutputMessage]] | None):
+                A function that transforms the internal output message to the external output message.
+        """
+        self.name = name or f"{self.__class__.__name__}_{uuid.uuid4().hex}"
+        self.description = description or "A multi-agent orchestration."
 
-    internal_topic_type: str = Field(
-        default_factory=lambda: uuid.uuid4().hex,
-        description="The unique and internal topic type of this orchestration instance.",
-    )
+        self._input_transition = input_transition
+        self._output_transition = output_transition
+
+        self._workers = workers
+        self._external_input_message_type = external_input_message_type
 
     async def invoke(
         self,
         task: str,
         runtime: AgentRuntime,
         time_out: int | None = None,
-    ) -> Any:
+    ) -> TExternalOutputMessage:
         """Invoke the multi-agent orchestration and return the result.
 
-        This is different from the `start` method, where clients need to wait for
-        the orchestration result by subscribing to the external topic.
-
         This method is a blocking call that waits for the orchestration to finish
-        and returns the result directly.
+        and returns the result.
 
         Args:
             task (str): The task to be executed by the agents.
@@ -105,16 +165,20 @@ class OrchestrationBase(KernelBaseModel, ABC):
         orchestration_result: Any = None
         orchestration_result_event = asyncio.Event()
 
-        def result_trigger_func(result: Any) -> None:
+        def result_callback(result: Any) -> None:
             nonlocal orchestration_result
             orchestration_result = result
             orchestration_result_event.set()
 
-        # This unique ID is used to isolate the orchestration run from others.
-        unique_registration_id = uuid.uuid4().hex
+        # This unique topic type is used to isolate the orchestration run from others.
+        internal_topic_type = uuid.uuid4().hex
 
-        await self.register(runtime, unique_registration_id, result_trigger_func=result_trigger_func)
-        await self._start(task, runtime)
+        await self._prepare(
+            runtime,
+            internal_topic_type=internal_topic_type,
+            result_callback=result_callback,
+        )
+        await self._start(task, runtime, internal_topic_type)
 
         # Wait for the orchestration result
         if time_out is not None:
@@ -126,68 +190,69 @@ class OrchestrationBase(KernelBaseModel, ABC):
             raise RuntimeError("Orchestration result is None.")
         return orchestration_result
 
-    async def start(self, task: str, runtime: AgentRuntime) -> None:
-        """Start the multi-agent orchestration.
-
-        This is different from the `invoke` method, where the result is returned directly.
-
-        This method returns immediately and clients need to wait for the orchestration
-        result by subscribing to the external topic.
-        """
-        # This unique ID is used to isolate the orchestration run from others.
-        unique_registration_id = uuid.uuid4().hex
-
-        await self.register(runtime, unique_registration_id)
-        await self._start(task, runtime)
-
-    async def register(
+    async def prepare(
         self,
         runtime: AgentRuntime,
-        unique_registration_id: str,
         external_topic_type: str | None = None,
-        result_trigger_func: Callable[[Any], None] | None = None,
-    ) -> None:
-        """Registers the orchestration instance with the runtime."""
-        await OrchestrationAgent.register(
+        direct_actor_type: str | None = None,
+        result_callback: Callable[[TExternalOutputMessage], None] | None = None,
+    ) -> str:
+        """Prepare the orchestration with the runtime.
+
+        Args:
+            runtime (AgentRuntime): The runtime environment for the agents.
+            external_topic_type (str | None): The external topic type for the orchestration to broadcast
+                and receive messages. If set, the orchestration will subscribe itself to this topic.
+            direct_actor_type (str | None): The direct actor type for which the orchestration
+                actor will relay the output message to.
+            result_callback (Callable[[TExternalOutputMessage], None] | None):
+                A function that is called when the result is available.
+
+        Returns:
+            str: The actor type of the orchestration so that external actors can send messages to it.
+        """
+        # This unique topic type is used to isolate the orchestration run from others.
+        internal_topic_type = uuid.uuid4().hex
+
+        return await self._prepare(
             runtime,
-            self._get_orchestration_agent_type(unique_registration_id),
-            lambda: OrchestrationAgent(
-                internal_topic_type=self.internal_topic_type,
-                external_topic_type=external_topic_type,
-                result_trigger_func=result_trigger_func,
-            ),
+            internal_topic_type,
+            external_topic_type=external_topic_type,
+            direct_actor_type=direct_actor_type,
+            result_callback=result_callback,
         )
-        await runtime.add_subscription(
-            TypeSubscription(
-                self.internal_topic_type,
-                self._get_orchestration_agent_type(unique_registration_id),
-            )
-        )
-        await runtime.add_subscription(
-            TypeSubscription(
-                external_topic_type,
-                self._get_orchestration_agent_type(unique_registration_id),
-            )
-        )
-
-        await self._register_agents(runtime, unique_registration_id)
-        await self._add_subscriptions(runtime, unique_registration_id)
 
     @abstractmethod
-    async def _start(self, task: str, runtime: AgentRuntime) -> None:
-        """Start the multi-agent orchestration."""
+    async def _start(self, task: str, runtime: AgentRuntime, internal_topic_type: str) -> None:
+        """Start the multi-agent orchestration.
+
+        Args:
+            task (str): The task to be executed by the agents.
+            runtime (AgentRuntime): The runtime environment for the agents.
+            internal_topic_type (str): The internal topic type for the orchestration that this actor is part of.
+        """
         pass
 
     @abstractmethod
-    async def _register_agents(self, runtime: AgentRuntime, unique_registration_id: str) -> None:
-        """Register the agents."""
-        pass
+    async def _prepare(
+        self,
+        runtime: AgentRuntime,
+        internal_topic_type: str,
+        external_topic_type: str | None = None,
+        direct_actor_type: str | None = None,
+        result_callback: Callable[[TExternalOutputMessage], None] | None = None,
+    ) -> None:
+        """Register the actors and orchestrations with the runtime and add the required subscriptions.
 
-    @abstractmethod
-    async def _add_subscriptions(self, runtime: AgentRuntime, unique_registration_id: str) -> None:
-        """Add subscriptions."""
-        pass
+        Args:
+            runtime (AgentRuntime): The runtime environment for the agents.
+            internal_topic_type (str): The internal topic type for the orchestration that this actor is part of.
+            external_topic_type (str | None): The external topic type for the orchestration.
+            direct_actor_type (str | None): The direct actor type for which this actor will relay the output message to.
+            result_callback (Callable[[TExternalOutputMessage], None] | None):
+                A function that is called when the result is available.
 
-    def _get_orchestration_agent_type(self, unique_registration_id: str) -> str:
-        """Get the collection agent type."""
-        return f"{OrchestrationAgent.__name__}_{unique_registration_id}"
+        Returns:
+            str: The actor type of the orchestration so that external actors can send messages to it.
+        """
+        pass

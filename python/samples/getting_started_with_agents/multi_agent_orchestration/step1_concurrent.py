@@ -30,7 +30,9 @@ async def main():
         service=OpenAIChatCompletion(),
     )
 
-    concurrent_pattern = ConcurrentOrchestration(agents=[physics_agent, chemistry_agent])
+    concurrent_pattern = ConcurrentOrchestration(
+        workers=[physics_agent, chemistry_agent],
+    )
 
     runtime = SingleThreadedAgentRuntime()
     runtime.start()
@@ -38,12 +40,12 @@ async def main():
     result = await concurrent_pattern.invoke(
         task="Why is the sky blue in one sentence?",
         runtime=runtime,
-        time_out=5,
     )
 
     await runtime.stop_when_idle()
 
-    print(result)
+    for agent_name, response in result.body.items():
+        print(f"{agent_name} response: {response}")
 
 
 if __name__ == "__main__":

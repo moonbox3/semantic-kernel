@@ -49,7 +49,7 @@ async def main():
     )
 
     sequential_pattern = SequentialOrchestration(
-        agents=[
+        workers=[
             concept_extractor_agent,
             writer_agent,
             format_proof_agent,
@@ -66,7 +66,7 @@ async def main():
 
     await runtime.stop_when_idle()
 
-    print(result)
+    print(result.body)
 
 
 if __name__ == "__main__":
