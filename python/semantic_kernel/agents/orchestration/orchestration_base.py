@@ -1,15 +1,18 @@
 # Copyright (c) Microsoft. All rights reserved.
 
 import asyncio
+import inspect
 import logging
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from typing import Any, Generic, TypeVar, Union, cast
+from typing import Generic, TypeVar, Union, cast
 
 from autogen_core import AgentRuntime, BaseAgent, MessageContext
 
 from semantic_kernel.agents.agent import Agent
+from semantic_kernel.contents.chat_message_content import ChatMessageContent
+from semantic_kernel.contents.utils.author_role import AuthorRole
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -38,14 +41,12 @@ class OrchestrationActorBase(
         self,
         internal_topic_type: str,
         external_input_message_type: type[TExternalInputMessage],
-        external_topic_type: str | None = None,
-        direct_actor_type: str | None = None,
-        input_transition: Callable[[TExternalInputMessage], Awaitable[TInternalInputMessage] | TInternalInputMessage]
-        | None = None,
+        input_transition: Callable[[TExternalInputMessage], Awaitable[TInternalInputMessage] | TInternalInputMessage],
         output_transition: Callable[
             [TInternalOutputMessage], Awaitable[TExternalOutputMessage] | TExternalOutputMessage
-        ]
-        | None = None,
+        ],
+        external_topic_type: str | None = None,
+        direct_actor_type: str | None = None,
         result_callback: Callable[[TExternalOutputMessage], None] | None = None,
     ) -> None:
         """Initialize the orchestration agent.
@@ -54,38 +55,23 @@ class OrchestrationActorBase(
             internal_topic_type (str): The internal topic type for the orchestration that this actor is part of.
             external_input_message_type (type[TExternalInputMessage]): The type of the external input message.
                 This is for dynamic type checking.
+            input_transition (Callable): A function that transforms the external input message to the internal
+                input message.
+            output_transition (Callable): A function that transforms the internal output message to the external
+                output message.
             external_topic_type (str | None): The external topic type for the orchestration.
-            direct_actor_type (str | None): The direct actor type for which this actor will relay the output message to.
-            input_transition (Callable | None):
-                A function that transforms the external input message to the internal input message.
-            output_transition (Callable | None):
-                A function that transforms the internal output message to the external output message.
-            result_callback: A function that is called when the result is available.
+            direct_actor_type (str | None): The direct actor type for which this actor will relay the output
+                message to.
+            result_callback (Callable | None): A function that is called when the result is available.
         """
         self._internal_topic_type = internal_topic_type
         self._external_input_message_type = external_input_message_type
+        self._input_transition = input_transition
+        self._output_transition = output_transition
 
         self._external_topic_type = external_topic_type
         self._direct_actor_type = direct_actor_type
         self._result_callback = result_callback
-
-        if input_transition is None:
-
-            def input_transition_func(input_message: TExternalInputMessage) -> TInternalInputMessage:
-                return cast(TInternalInputMessage, input_message)
-
-            self._input_transition = input_transition_func
-        else:
-            self._input_transition = input_transition  # type: ignore[assignment]
-
-        if output_transition is None:
-
-            def output_transition_func(output_message: TInternalOutputMessage) -> TExternalOutputMessage:
-                return cast(TExternalOutputMessage, output_message)
-
-            self._output_transition = output_transition_func
-        else:
-            self._output_transition = output_transition  # type: ignore[assignment]
 
         super().__init__(description="Orchestration Agent")
 
@@ -140,23 +126,38 @@ class OrchestrationBase(
                 This is for dynamic type checking.
             name (str | None): A unique name of the orchestration. If None, a unique name will be generated.
             description (str | None): The description of the orchestration. If None, use a default description.
-            input_transition (Callable | None):
-                A function that transforms the external input message to the internal input message.
-            output_transition (Callable | None):
-                A function that transforms the internal output message to the external output message.
+            input_transition (Callable | None):  function that transforms the external input message to the
+                internal input message.
+            output_transition (Callable | None): A function that transforms the internal output message to the
+                external output message.
         """
         self.name = name or f"{self.__class__.__name__}_{uuid.uuid4().hex}"
         self.description = description or "A multi-agent orchestration."
 
-        self._input_transition = input_transition
-        self._output_transition = output_transition
+        if input_transition is None:
+
+            def input_transition_func(input_message: TExternalInputMessage) -> TInternalInputMessage:
+                return cast(TInternalInputMessage, input_message)
+
+            self._input_transition = input_transition_func
+        else:
+            self._input_transition = input_transition  # type: ignore[assignment]
+
+        if output_transition is None:
+
+            def output_transition_func(output_message: TInternalOutputMessage) -> TExternalOutputMessage:
+                return cast(TExternalOutputMessage, output_message)
+
+            self._output_transition = output_transition_func
+        else:
+            self._output_transition = output_transition  # type: ignore[assignment]
 
         self._workers = workers
         self._external_input_message_type = external_input_message_type
 
     async def invoke(
         self,
-        task: str,
+        task: str | ChatMessageContent | TExternalInputMessage,
         runtime: AgentRuntime,
         time_out: int | None = None,
     ) -> TExternalOutputMessage:
@@ -170,10 +171,10 @@ class OrchestrationBase(
             runtime (AgentRuntime): The runtime environment for the agents.
             time_out (int | None): The timeout (seconds) for the orchestration. If None, wait indefinitely.
         """
-        orchestration_result: Any = None
+        orchestration_result: TExternalOutputMessage | None = None
         orchestration_result_event = asyncio.Event()
 
-        def result_callback(result: Any) -> None:
+        def result_callback(result: TExternalOutputMessage) -> None:
             nonlocal orchestration_result
             orchestration_result = result
             orchestration_result_event.set()
@@ -186,7 +187,23 @@ class OrchestrationBase(
             internal_topic_type=internal_topic_type,
             result_callback=result_callback,
         )
-        await self._start(task, runtime, internal_topic_type)
+
+        if isinstance(task, str):
+            prepared_task = ChatMessageContent(role=AuthorRole.USER, content=task)
+        elif isinstance(task, ChatMessageContent):
+            prepared_task = task
+        elif isinstance(task, self._external_input_message_type):
+            if inspect.isawaitable(self._input_transition):
+                prepared_task: TInternalInputMessage = await self._input_transition(task)  # type: ignore[no-redef]
+            else:
+                prepared_task: TInternalInputMessage = self._input_transition(task)  # type: ignore[no-redef]
+        else:
+            raise TypeError(
+                f"Invalid task type: {type(task)}. "
+                f"Expected str, {self._external_input_message_type}, or ChatMessageContent."
+            )
+
+        await self._start(prepared_task, runtime, internal_topic_type)
 
         # Wait for the orchestration result
         if time_out is not None:
@@ -231,11 +248,16 @@ class OrchestrationBase(
         )
 
     @abstractmethod
-    async def _start(self, task: str, runtime: AgentRuntime, internal_topic_type: str) -> None:
+    async def _start(
+        self,
+        task: TInternalInputMessage | ChatMessageContent,
+        runtime: AgentRuntime,
+        internal_topic_type: str,
+    ) -> None:
         """Start the multi-agent orchestration.
 
         Args:
-            task (str): The task to be executed by the agents.
+            task (TInternalInputMessage | ChatMessageContent): The message to be sent to the orchestration.
             runtime (AgentRuntime): The runtime environment for the agents.
             internal_topic_type (str): The internal topic type for the orchestration that this actor is part of.
         """

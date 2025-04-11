@@ -171,7 +171,7 @@ async def main():
     runtime.start()
 
     result = await sequential_orchestration.invoke(
-        task="Design a Netflix like system.",
+        task="Design a video streaming plaform.",
         runtime=runtime,
     )
 

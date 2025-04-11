@@ -28,7 +28,9 @@ logging.getLogger("semantic_kernel.agents.orchestration.sequential").setLevel(
 )  # Enable DEBUG for the sequential pattern
 
 
-def get_sequential_orchestration(expert_agent: Agent, target_language: str) -> SequentialOrchestration:
+def get_sequential_orchestration(
+    expert_agent: Agent, target_language: str
+) -> SequentialOrchestration[ConcurrentRequestMessage, ConcurrentResponseMessage]:
     """Return a sequential orchestration that will be nested inside a concurrent orchestration."""
     translation_agent = ChatCompletionAgent(
         name="TranslationAgent",

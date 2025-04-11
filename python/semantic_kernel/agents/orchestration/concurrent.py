@@ -14,7 +14,6 @@ from semantic_kernel.agents.agent import Agent
 from semantic_kernel.agents.orchestration.agent_actor_base import AgentActorBase
 from semantic_kernel.agents.orchestration.orchestration_base import OrchestrationActorBase, OrchestrationBase
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
-from semantic_kernel.contents.utils.author_role import AuthorRole
 from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 if sys.version_info >= (3, 12):
@@ -66,7 +65,7 @@ class ConcurrentOrchestrationActor(
             if inspect.isawaitable(self._input_transition):
                 transition_message: ConcurrentRequestMessage = await self._input_transition(message)
             else:
-                transition_message = self._input_transition(message)
+                transition_message: ConcurrentRequestMessage = self._input_transition(message)  # type: ignore[no-redef]
             await self._handle_orchestration_input_message(transition_message, ctx)
         elif isinstance(message, ConcurrentResultMessage):
             await self._handle_orchestration_output_message(message, ctx)
@@ -95,9 +94,9 @@ class ConcurrentOrchestrationActor(
         logger.debug(f"{self.id}: Received orchestration output message.")
 
         if inspect.isawaitable(self._output_transition):
-            external_output_message = await self._output_transition(message)
+            external_output_message: TExternalOutputMessage = await self._output_transition(message)
         else:
-            external_output_message = self._output_transition(message)
+            external_output_message: TExternalOutputMessage = self._output_transition(message)  # type: ignore[no-redef]
 
         if self._external_topic_type:
             logger.debug(f"Relaying message to external topic: {self._external_topic_type}")
@@ -185,8 +184,14 @@ class ConcurrentOrchestration(
         external_input_message_type: type[TExternalInputMessage] = ConcurrentRequestMessage,  # type: ignore[assignment]
         name: str | None = None,
         description: str | None = None,
-        input_transition: Callable[[TExternalInputMessage], Awaitable[ConcurrentRequestMessage]] | None = None,
-        output_transition: Callable[[ConcurrentResultMessage], Awaitable[TExternalOutputMessage]] | None = None,
+        input_transition: Callable[
+            [TExternalInputMessage], Awaitable[ConcurrentRequestMessage] | ConcurrentRequestMessage
+        ]
+        | None = None,
+        output_transition: Callable[
+            [ConcurrentResultMessage], Awaitable[TExternalOutputMessage] | TExternalOutputMessage
+        ]
+        | None = None,
     ) -> None:
         """Initialize the orchestration base.
 
@@ -196,14 +201,14 @@ class ConcurrentOrchestration(
                 This is for dynamic type checking. Default is ConcurrentRequestMessage.
             name (str | None): A unique name of the orchestration. If None, a unique name will be generated.
             description (str | None): The description of the orchestration. If None, use a default description.
-            input_transition (Callable[[TExternalInputMessage], Awaitable[ConcurrentRequestMessage]] | None):
-                A function that transforms the external input message to the internal input message.
-            output_transition (Callable[[ConcurrentResultMessage], Awaitable[TExternalOutputMessage]] | None):
-                A function that transforms the internal output message to the external output message.
+            input_transition (Callable): A function that transforms the external input message to the internal
+                input message.
+            output_transition (Callable): A function that transforms the internal output message to the external
+                output message.
         """
         super().__init__(
             workers,
-            external_input_message_type=external_input_message_type,
+            external_input_message_type,
             name=name,
             description=description,
             input_transition=input_transition,
@@ -211,11 +216,18 @@ class ConcurrentOrchestration(
         )
 
     @override
-    async def _start(self, task: str, runtime: AgentRuntime, internal_topic_type: str) -> None:
+    async def _start(
+        self,
+        task: ConcurrentRequestMessage | ChatMessageContent,
+        runtime: AgentRuntime,
+        internal_topic_type: str,
+    ) -> None:
         """Start the concurrent pattern."""
-        message = ChatMessageContent(AuthorRole.USER, content=task)
+        if isinstance(task, ChatMessageContent):
+            message = ConcurrentRequestMessage(body=task)
+
         await runtime.send_message(
-            ConcurrentRequestMessage(body=message),
+            message,
             AgentId(
                 type=self._get_orchestration_actor_type(internal_topic_type),
                 key="default",
@@ -271,10 +283,10 @@ class ConcurrentOrchestration(
             lambda: ConcurrentOrchestrationActor(
                 internal_topic_type,
                 external_input_message_type=self._external_input_message_type,
-                external_topic_type=external_topic_type,
-                direct_actor_type=direct_actor_type,
                 input_transition=self._input_transition,
                 output_transition=self._output_transition,
+                external_topic_type=external_topic_type,
+                direct_actor_type=direct_actor_type,
                 result_callback=result_callback,
             ),
         )
