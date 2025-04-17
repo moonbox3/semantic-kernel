@@ -36,6 +36,8 @@ async def main():
     )
 
     # Or wherever runtime definition occurs
+    # Only the runtime knows about the envelope
+    # all orchestrations, actors, and messages stay untouched.
     runtime = EnvelopedRuntime(
         inner=SingleThreadedAgentRuntime(),
     )
