@@ -7,6 +7,7 @@ from autogen_core import SingleThreadedAgentRuntime
 
 from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatCompletionAgent
 from semantic_kernel.agents.orchestration.concurrent import ConcurrentOrchestration
+from semantic_kernel.agents.orchestration.enveloped_runtime import EnvelopedRuntime
 from semantic_kernel.connectors.ai.open_ai.services.open_ai_chat_completion import OpenAIChatCompletion
 
 logging.basicConfig(level=logging.WARNING)  # Set default level to WARNING
@@ -34,8 +35,11 @@ async def main():
         workers=[physics_agent, chemistry_agent],
     )
 
-    runtime = SingleThreadedAgentRuntime()
-    runtime.start()
+    # Or wherever runtime definition occurs
+    runtime = EnvelopedRuntime(
+        inner=SingleThreadedAgentRuntime(),
+    )
+    await runtime.start()
 
     result = await concurrent_pattern.invoke(
         task="Why is the sky blue in one sentence?",
