@@ -1,9 +1,10 @@
 # Copyright (c) Microsoft. All rights reserved.
 
+import json
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from html import escape
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from semantic_kernel.kernel_pydantic import KernelBaseModel
 from semantic_kernel.prompt_template.prompt_template_config import PromptTemplateConfig
@@ -45,11 +46,20 @@ class PromptTemplateBase(KernelBaseModel, ABC):
 
         new_args = KernelArguments(settings=arguments.execution_settings)
         for name, value in arguments.items():
-            if isinstance(value, str) and self._should_escape(name, self.prompt_template_config.input_variables):
-                new_args[name] = escape(value)
-            else:
-                new_args[name] = value
+            should_escape = self._should_escape(name, self.prompt_template_config.input_variables)
+            new_args[name] = self._render_argument(value, should_escape)
         return new_args
+
+    def _render_argument(self, value: Any, should_escape=True):
+        """If it's not a string, convert to JSON if possible, else str()."""
+        if not isinstance(value, str):
+            try:
+                value = json.dumps(value, ensure_ascii=False)
+            except Exception:
+                value = str(value)
+        if should_escape:
+            value = escape(value)
+        return value
 
     def _get_allow_dangerously_set_function_output(self) -> bool:
         """Get the allow_dangerously_set_content flag.

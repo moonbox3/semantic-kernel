@@ -1,5 +1,8 @@
 # Copyright (c) Microsoft. All rights reserved.
 
+import json
+from html import escape
+
 import pytest
 
 from semantic_kernel.exceptions.template_engine_exceptions import TemplateRenderException
@@ -137,3 +140,75 @@ async def test_it_renders_code_error(kernel: Kernel):
     target = create_kernel_prompt_template(template, allow_dangerously_set_content=True)
     with pytest.raises(TemplateRenderException):
         await target.render(kernel, arguments)
+
+
+async def test_render_escapes_dict_argument(kernel: Kernel):
+    arguments = KernelArguments()
+    arguments["input"] = {"key": "<script>alert(1)</script>"}
+    template = "result: {{$input}}"
+    target = create_kernel_prompt_template(template)
+    result = await target.render(kernel, arguments)
+    expected = "result: " + escape(json.dumps({"key": "<script>alert(1)</script>"}, ensure_ascii=False), quote=True)
+    assert result == expected
+
+
+async def test_render_escapes_list_argument(kernel: Kernel):
+    arguments = KernelArguments()
+    arguments["input"] = ["<foo>", "&bar"]
+    template = "list: {{$input}}"
+    target = create_kernel_prompt_template(template)
+    result = await target.render(kernel, arguments)
+    expected = "list: " + escape(json.dumps(["<foo>", "&bar"], ensure_ascii=False), quote=True)
+    assert result == expected
+
+
+async def test_render_escapes_int_and_float_arguments(kernel: Kernel):
+    arguments = KernelArguments()
+    arguments["int_arg"] = 42
+    arguments["float_arg"] = 3.14159
+    template = "i: {{$int_arg}}, f: {{$float_arg}}"
+    target = create_kernel_prompt_template(template)
+    result = await target.render(kernel, arguments)
+    assert result == "i: 42, f: 3.14159"
+
+
+async def test_render_string_with_special_characters(kernel: Kernel):
+    arguments = KernelArguments()
+    arguments["input"] = "<>&'\""
+    template = "special: {{$input}}"
+    target = create_kernel_prompt_template(template)
+    result = await target.render(kernel, arguments)
+    assert result == "special: &lt;&gt;&amp;&#x27;&quot;"
+
+
+async def test_render_dict_with_special_characters_in_value(kernel: Kernel):
+    arguments = KernelArguments()
+    arguments["input"] = {"foo": "<&bar>"}
+    template = "dict: {{$input}}"
+    target = create_kernel_prompt_template(template)
+    result = await target.render(kernel, arguments)
+    expected = "dict: " + escape(json.dumps({"foo": "<&bar>"}, ensure_ascii=False), quote=True)
+    assert result == expected
+
+
+async def test_render_allow_dangerously_set_content(kernel: Kernel):
+    arguments = KernelArguments()
+    arguments["input"] = {"foo": "<bar>"}
+    template = "raw: {{$input}}"
+    target = create_kernel_prompt_template(template, allow_dangerously_set_content=True)
+    result = await target.render(kernel, arguments)
+    expected = "raw: " + escape(json.dumps({"foo": "<bar>"}, ensure_ascii=False), quote=True)
+    assert result == expected
+
+
+async def test_render_custom_object(kernel: Kernel):
+    class Foo:
+        def __str__(self):
+            return "<FOO&OBJ>"
+
+    arguments = KernelArguments()
+    arguments["input"] = Foo()
+    template = "obj: {{$input}}"
+    target = create_kernel_prompt_template(template)
+    result = await target.render(kernel, arguments)
+    assert result == "obj: &lt;FOO&amp;OBJ&gt;"
