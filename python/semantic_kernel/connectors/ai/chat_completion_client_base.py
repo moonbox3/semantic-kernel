@@ -103,6 +103,9 @@ class ChatCompletionClientBase(AIServiceClientBase, ABC):
             merge_function_results,
         )
 
+        # Temp to just get a resonse from the model without running auto function calling at this layer.
+        return await self._inner_get_chat_message_contents(chat_history, settings)
+
         # Create a copy of the settings to avoid modifying the original settings
         settings = copy.deepcopy(settings)
         # Later on, we already use the tools or equivalent settings, we cast here.

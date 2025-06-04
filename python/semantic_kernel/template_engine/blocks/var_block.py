@@ -2,7 +2,7 @@
 
 import logging
 from re import compile
-from typing import TYPE_CHECKING, Any, ClassVar, Optional
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import model_validator
 
@@ -13,7 +13,6 @@ from semantic_kernel.template_engine.blocks.symbols import Symbols
 
 if TYPE_CHECKING:
     from semantic_kernel.functions.kernel_arguments import KernelArguments
-    from semantic_kernel.kernel import Kernel
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -65,7 +64,7 @@ class VarBlock(Block):
             fields["name"] = name
         return fields
 
-    def render(self, _: "Kernel", arguments: Optional["KernelArguments"] = None) -> str:
+    def render(self, arguments: "KernelArguments | None" = None) -> str:
         """Render the variable block with the given arguments.
 
         If the variable is not found in the arguments, return an empty string.

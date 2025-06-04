@@ -12,7 +12,6 @@ from semantic_kernel.template_engine.blocks.block_types import BlockTypes
 
 if TYPE_CHECKING:
     from semantic_kernel.functions.kernel_arguments import KernelArguments
-    from semantic_kernel.kernel import Kernel
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -62,6 +61,6 @@ class FunctionIdBlock(Block):
             fields["function_name"] = matches.group("function")
         return fields
 
-    def render(self, *_: "Kernel | KernelArguments | None") -> str:
+    def render(self, *_: "KernelArguments | None") -> str:
         """Render the function id block."""
         return self.content

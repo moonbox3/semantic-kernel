@@ -94,7 +94,7 @@ class KernelPromptTemplate(PromptTemplateBase):
         return await self.render_blocks(self._blocks, kernel, arguments)
 
     async def render_blocks(
-        self, blocks: list[Block], kernel: "Kernel", arguments: "KernelArguments | None" = None
+        self, blocks: list[Block], kernel: "Kernel | None" = None, arguments: "KernelArguments | None" = None
     ) -> str:
         """Given a list of blocks render each block and compose the final result.
 
@@ -116,7 +116,7 @@ class KernelPromptTemplate(PromptTemplateBase):
         allow_unsafe_function_output = self._get_allow_dangerously_set_function_output()
         for block in blocks:
             if isinstance(block, TextRenderer):
-                rendered_blocks.append(block.render(kernel, arguments))
+                rendered_blocks.append(block.render(arguments))
                 continue
             if isinstance(block, CodeRenderer):
                 try:

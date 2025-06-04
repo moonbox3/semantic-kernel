@@ -1,5 +1,6 @@
 # Copyright (c) Microsoft. All rights reserved.
 
+import asyncio
 import logging
 import sys
 import uuid
@@ -21,12 +22,12 @@ from semantic_kernel.contents.function_result_content import FunctionResultConte
 from semantic_kernel.contents.history_reducer.chat_history_reducer import ChatHistoryReducer
 from semantic_kernel.contents.streaming_chat_message_content import StreamingChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
-from semantic_kernel.exceptions import KernelServiceNotFoundError
 from semantic_kernel.exceptions.agent_exceptions import (
     AgentInitializationException,
     AgentInvokeException,
     AgentThreadOperationException,
 )
+from semantic_kernel.functions.function_tools import FunctionTool
 from semantic_kernel.functions.kernel_arguments import KernelArguments
 from semantic_kernel.functions.kernel_function import TEMPLATE_FORMAT_MAP
 from semantic_kernel.functions.kernel_plugin import KernelPlugin
@@ -130,11 +131,11 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
         function_choice_behavior: FunctionChoiceBehavior | None = None,
         id: str | None = None,
         instructions: str | None = None,
-        kernel: "Kernel | None" = None,
         name: str | None = None,
         plugins: list[KernelPlugin | object] | dict[str, KernelPlugin | object] | None = None,
         prompt_template_config: PromptTemplateConfig | None = None,
         service: ChatCompletionClientBase | None = None,
+        tools: list[Any] | None = None,
     ) -> None:
         """Initialize a new instance of ChatCompletionAgent.
 
@@ -144,9 +145,6 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
             description: The description of the agent.
             function_choice_behavior: The function choice behavior to determine how and which plugins are
                 advertised to the model.
-            kernel: The kernel instance. If both a kernel and a service are provided, the service will take precedence
-                if they share the same service_id or ai_model_id. Otherwise if separate, the first AI service
-                registered on the kernel will be used.
             id: The unique identifier for the agent. If not provided,
                 a unique GUID will be generated.
             instructions: The instructions for the agent.
@@ -156,6 +154,9 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
             prompt_template_config: The prompt template configuration for the agent.
             service: The chat completion service instance. If a kernel is provided with the same service_id or
                 `ai_model_id`, the service will take precedence.
+            tools: A list of tools to be used by the agent. Each tool should be an instance of FunctionTool or use
+                the FunctionTool (`@function_tool()`) decorator. If provided, these tools will be added to the agent's
+                tool map.
         """
         args: dict[str, Any] = {
             "description": description,
@@ -164,8 +165,6 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
             args["name"] = name
         if id is not None:
             args["id"] = id
-        if kernel is not None:
-            args["kernel"] = kernel
         if arguments is not None:
             args["arguments"] = arguments
 
@@ -185,6 +184,9 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
         if service is not None:
             args["service"] = service
 
+        if tools is not None:
+            args["tools"] = tools
+
         if instructions is not None:
             args["instructions"] = instructions
         if prompt_template_config is not None:
@@ -199,40 +201,12 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
     @model_validator(mode="after")
     def configure_service(self) -> "ChatCompletionAgent":
         """Configure the service used by the ChatCompletionAgent."""
-        if self.service is None:
-            return self
         if not isinstance(self.service, ChatCompletionClientBase):
             raise AgentInitializationException(
                 f"Service provided for ChatCompletionAgent is not an instance of ChatCompletionClientBase. "
                 f"Service: {type(self.service)}"
             )
-        self.kernel.add_service(self.service, overwrite=True)
         return self
-
-    async def create_channel(
-        self, chat_history: ChatHistory | None = None, thread_id: str | None = None
-    ) -> AgentChannel:
-        """Create a ChatHistoryChannel.
-
-        Args:
-            chat_history: The chat history for the channel. If None, a new ChatHistory instance will be created.
-            thread_id: The ID of the thread. If None, a new thread will be created.
-
-        Returns:
-            An instance of AgentChannel.
-        """
-        from semantic_kernel.agents.chat_completion.chat_completion_agent import ChatHistoryAgentThread
-
-        ChatHistoryChannel.model_rebuild()
-
-        thread = ChatHistoryAgentThread(chat_history=chat_history, thread_id=thread_id)
-
-        if thread.id is None:
-            await thread.create()
-
-        messages = [message async for message in thread.get_messages()]
-
-        return ChatHistoryChannel(messages=messages, thread=thread)
 
     # region Declarative Spec
 
@@ -269,7 +243,6 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
         *,
         thread: AgentThread | None = None,
         arguments: KernelArguments | None = None,
-        kernel: "Kernel | None" = None,
         **kwargs: Any,
     ) -> AgentResponseItem[ChatMessageContent]:
         """Get a response from the agent.
@@ -279,7 +252,6 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
                 a list of strings or ChatMessageContent.
             thread: The thread to use for agent invocation.
             arguments: The kernel arguments.
-            kernel: The kernel instance.
             kwargs: The keyword arguments.
 
         Returns:
@@ -303,7 +275,6 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
             chat_history,
             None,
             arguments,
-            kernel,
             **kwargs,
         ):
             responses.append(response)
@@ -322,7 +293,6 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
         thread: AgentThread | None = None,
         on_intermediate_message: Callable[[ChatMessageContent], Awaitable[None]] | None = None,
         arguments: KernelArguments | None = None,
-        kernel: "Kernel | None" = None,
         **kwargs: Any,
     ) -> AsyncIterable[AgentResponseItem[ChatMessageContent]]:
         """Invoke the chat history handler.
@@ -333,7 +303,7 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
             thread: The thread to use for agent invocation.
             on_intermediate_message: A callback function to handle intermediate steps of the agent's execution.
             arguments: The kernel arguments.
-            kernel: The kernel instance.
+
             kwargs: The keyword arguments.
 
         Returns:
@@ -356,7 +326,6 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
             chat_history,
             on_intermediate_message,
             arguments,
-            kernel,
             **kwargs,
         ):
             yield AgentResponseItem(message=response, thread=thread)
@@ -483,9 +452,48 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
                 )
             )
 
+    async def _auto_invoke_loop(
+        self,
+        chat_completion_service: ChatCompletionClientBase,
+        chat_history: ChatHistory,
+        settings: PromptExecutionSettings,
+        max_attempts: int = 10,
+    ) -> list[ChatMessageContent]:
+        """Auto invoke loop."""
+        for _ in range(max_attempts):
+            completions = await chat_completion_service.get_chat_message_contents(chat_history, settings)
+            assistant_msg = completions[0]
+
+            function_calls = [it for it in assistant_msg.items if isinstance(it, FunctionCallContent)]
+            if not function_calls:
+                return completions
+
+            chat_history.add_message(assistant_msg)
+
+            results: list[ChatMessageContent] = await asyncio.gather(*[
+                self._execute_function_call(fc) for fc in function_calls
+            ])
+
+            for chat_msg in results:
+                chat_history.add_message(chat_msg)
+
+        settings.tool_choice = "none"
+        return await chat_completion_service.get_chat_message_contents(chat_history, settings)
+
     # endregion
 
     # region Helper Methods
+
+    def tool_to_json_schema_spec(self, tool: FunctionTool) -> dict[str, Any]:
+        """Convert a FunctionTool to the JSON Schema function specification format."""
+        return {
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool.description or "",
+                "parameters": tool.model_json_schema(),
+            },
+        }
 
     async def _inner_invoke(
         self,
@@ -493,7 +501,6 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
         history: ChatHistory,
         on_intermediate_message: Callable[[ChatMessageContent], Awaitable[None]] | None = None,
         arguments: KernelArguments | None = None,
-        kernel: "Kernel | None" = None,
         **kwargs: Any,
     ) -> AsyncIterable[ChatMessageContent]:
         """Helper method to invoke the agent with a chat history in non-streaming mode."""
@@ -502,12 +509,11 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
         else:
             arguments.update(kwargs)
 
-        kernel = kernel or self.kernel
         arguments = self._merge_arguments(arguments)
 
-        chat_completion_service, settings = await self._get_chat_completion_service_and_settings(
-            kernel=kernel, arguments=arguments
-        )
+        settings = arguments.execution_settings
+        if not settings:
+            settings = self.service.instantiate_prompt_execution_settings()
 
         # If the user hasn't provided a function choice behavior, use the agent's default.
         if settings.function_choice_behavior is None:
@@ -515,24 +521,25 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
 
         agent_chat_history = await self._prepare_agent_chat_history(
             history=history,
-            kernel=kernel,
             arguments=arguments,
         )
         start_idx = len(agent_chat_history)
 
         message_count_before_completion = len(agent_chat_history)
 
-        logger.debug(f"[{type(self).__name__}] Invoking {type(chat_completion_service).__name__}.")
+        logger.debug(f"[{type(self).__name__}] Invoking {type(self.service).__name__}.")
 
-        responses = await chat_completion_service.get_chat_message_contents(
-            chat_history=agent_chat_history,
-            settings=settings,
-            kernel=kernel,
-            arguments=arguments,
+        settings.tool_choice = "auto"
+        settings.tools = [self.tool_to_json_schema_spec(t) for t in self.tool_map.values()]
+
+        responses = await self._auto_invoke_loop(
+            self.service,
+            agent_chat_history,
+            settings,
         )
 
         logger.debug(
-            f"[{type(self).__name__}] Invoked {type(chat_completion_service).__name__} "
+            f"[{type(self).__name__}] Invoked {type(self.service).__name__} "
             f"with message count: {message_count_before_completion}."
         )
 
@@ -557,11 +564,9 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
                 await thread.on_new_message(response)
             yield response
 
-    async def _prepare_agent_chat_history(
-        self, history: ChatHistory, kernel: "Kernel", arguments: KernelArguments
-    ) -> ChatHistory:
+    async def _prepare_agent_chat_history(self, history: ChatHistory, arguments: KernelArguments) -> ChatHistory:
         """Prepare the agent chat history from the input history by adding the formatted instructions."""
-        formatted_instructions = await self.format_instructions(kernel, arguments)
+        formatted_instructions = await self.format_instructions(arguments)
         messages = []
         if formatted_instructions:
             messages.append(ChatMessageContent(role=AuthorRole.SYSTEM, content=formatted_instructions, name=self.name))
@@ -569,22 +574,6 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
             messages.extend(history.messages)
 
         return ChatHistory(messages=messages)
-
-    async def _get_chat_completion_service_and_settings(
-        self, kernel: "Kernel", arguments: KernelArguments
-    ) -> tuple[ChatCompletionClientBase, PromptExecutionSettings]:
-        """Get the chat completion service and settings."""
-        chat_completion_service, settings = kernel.select_ai_service(arguments=arguments, type=ChatCompletionClientBase)
-
-        if not chat_completion_service:
-            raise KernelServiceNotFoundError(
-                "Chat completion service not found. Check your service or kernel configuration."
-            )
-
-        assert isinstance(chat_completion_service, ChatCompletionClientBase)  # nosec
-        assert settings is not None  # nosec
-
-        return chat_completion_service, settings
 
     async def _drain_mutated_messages(
         self,

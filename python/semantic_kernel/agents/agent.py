@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft. All rights reserved.
 
 import importlib
+import json
 import logging
 import threading
 import uuid
@@ -10,14 +11,16 @@ from contextlib import AbstractAsyncContextManager
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Generic, Protocol, TypeVar, runtime_checkable
 
 import yaml
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from semantic_kernel.agents.channels.agent_channel import AgentChannel
 from semantic_kernel.contents.chat_message_content import CMC_ITEM_TYPES, ChatMessageContent
+from semantic_kernel.contents.function_call_content import FunctionCallContent
+from semantic_kernel.contents.function_result_content import FunctionResultContent
 from semantic_kernel.contents.streaming_chat_message_content import StreamingChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from semantic_kernel.exceptions.agent_exceptions import AgentExecutionException, AgentInitializationException
-from semantic_kernel.functions import kernel_function
+from semantic_kernel.functions.function_tools import FunctionTool, function_tool
 from semantic_kernel.functions.kernel_arguments import KernelArguments
 from semantic_kernel.functions.kernel_plugin import KernelPlugin
 from semantic_kernel.kernel import Kernel
@@ -267,55 +270,64 @@ class Agent(KernelBaseModel, ABC):
     description: str | None = None
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     instructions: str | None = None
-    kernel: Kernel = Field(default_factory=Kernel)
     name: str = Field(default_factory=lambda: f"agent_{generate_random_ascii_name()}", pattern=AGENT_NAME_REGEX)
     prompt_template: PromptTemplateBase | None = None
+    tools: list[Any] | None = Field(default=None, exclude=True)
+    tool_map: dict[str, FunctionTool[Any, Any]] = Field(
+        default_factory=dict,
+        exclude=True,
+        description="Map of tool names to FunctionTool instances. Do not set this manually.",
+    )
 
-    @staticmethod
-    def _get_plugin_name(plugin: KernelPlugin | object) -> str:
-        """Helper method to get the plugin name."""
-        if isinstance(plugin, KernelPlugin):
-            return plugin.name
-        return plugin.__class__.__name__
-
-    @model_validator(mode="before")
-    @classmethod
-    def _configure_plugins(cls, data: Any) -> Any:
-        """Configure any plugins passed in."""
-        if isinstance(data, dict) and (plugins := data.pop("plugins", None)):
-            kernel = data.get("kernel", None)
-            if not kernel:
-                kernel = Kernel()
-            for plugin in plugins:
-                kernel.add_plugin(plugin)
-            data["kernel"] = kernel
-        return data
+    __function_tool__: FunctionTool | None = None  # Cache per instance
 
     def model_post_init(self, __context: Any) -> None:
-        """Post initialization: create a kernel_function that calls this agent's get_response()."""
+        """Post-initialization logic for the agent."""
 
-        @kernel_function(name=self.name, description=self.description or self.instructions)
-        async def _as_kernel_function(
-            messages: Annotated[str | list[str], "The user messages for the agent."],
-            instructions_override: Annotated[str | None, "Override agent instructions."] = None,
-        ) -> Annotated[Any, "Agent response."]:
-            """A Minimal universal function for all agents.
-
-            Exposes 'messages' and 'instructions_override'.
-            Internally, we pass them to get_response() for whichever agent is calling it.
-            """
+        # Ensure each agent exposes itself as a function_tool for composition
+        @function_tool(
+            name=self.name,
+            description=self.description or self.instructions or f"Agent tool for {self.name}",
+        )
+        async def _agent_function_tool(
+            messages: Annotated[str | list[str], "Messages to send to the agent."],
+            instructions_override: Annotated[str | None, "Optional override for agent instructions."] = None,
+        ) -> Annotated[Any, "Agent response"]:
+            # Normalize messages
             if isinstance(messages, str):
                 messages = [messages]
-
             response_item = await self.get_response(
-                messages=messages,  # type: ignore
-                instructions_override=instructions_override if instructions_override else None,
+                messages=messages,
+                instructions_override=instructions_override,
             )
             return response_item.content
 
-        # Keep Pydantic happy with the "private" method, otherwise
-        # it will fail validating the model.
-        setattr(self, "_as_kernel_function", _as_kernel_function)
+        # Expose this function_tool instance for composition
+        object.__setattr__(self, "__function_tool__", _agent_function_tool)
+
+        super().model_post_init(__context)  # If parent has post_init logic
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_tools(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Accept 'tools' as a constructor/model arg and build 'tool_map' for all agent types.
+
+        Handles FunctionTool, agent-as-tool (__function_tool__), etc.
+        """
+        tools = data.pop("tools", None)
+        if tools is not None:
+            tool_map = {}
+            for obj in tools:
+                # 1. Prefer agent's __function_tool__ if present
+                tool = getattr(obj, "__function_tool__", None)
+                if tool is None:
+                    # 2. Fallback to legacy .tool or the object itself
+                    tool = getattr(obj, "tool", obj)
+                if not isinstance(tool, FunctionTool):
+                    raise TypeError(f"{obj} is not a FunctionTool or agent exposing __function_tool__")
+                tool_map[tool.name] = tool
+            data["tool_map"] = tool_map
+        return data
 
     # region Invocation Methods
 
@@ -410,6 +422,22 @@ class Agent(KernelBaseModel, ABC):
             An agent response item.
         """
         pass
+
+    async def _execute_function_call(self, fcc: FunctionCallContent) -> ChatMessageContent:
+        """Resolve a function call to either a stateless FunctionTool or raise KeyError."""
+        tool: FunctionTool[BaseModel, Any] | None = self.tool_map.get(fcc.function_name)
+        if tool is not None:
+            args: dict[str, Any] = json.loads(fcc.arguments) if fcc.arguments else {}
+            args_obj: BaseModel = tool.input_model(**args)
+            raw_result: Any = await tool.run(args_obj)
+
+            frc = FunctionResultContent.from_function_call_content_and_result(
+                function_call_content=fcc,
+                result=raw_result,
+            )
+            return frc.to_chat_message_content()
+
+        raise KeyError(f"No tool or kernel function named '{fcc.function_name}'")
 
     # endregion
 
