@@ -81,17 +81,19 @@ async def main() -> None:
         Sample Output:
 
         # User: What is the weather in New York?
-        [TOOL INVOKE] Fetching weather for city: New York
-        # WeatherAgent: The weather in New York is currently rainy.
+        [TOOL INVOKE] Fetching weather for city: New York, and location: USA
+        # WeatherAgent: The weather in New York is rainy. Is there anything else you would like to know about the 
+            weather?
 
         # User: Get the current weather in Seattle and then reverse that word.
-        [TOOL INVOKE] Fetching weather for city: Seattle
-        [TOOL INVOKE] Reversing the string: rainy
-        # WeatherAgent: The current weather in Seattle is rainy. Reversed, the word "rainy" is "yniar".
+        [TOOL INVOKE] Fetching weather for city: Seattle, and location: USA
+        [TOOL INVOKE] Reversing the string: Seattle
+        # WeatherAgent: The current weather in Seattle is rainy. Also, the word "Seattle" reversed is "elttaeS". 
+            If you need more information, feel free to ask!
 
-        # User: What is the weather in London?
-        [TOOL INVOKE] Fetching weather for city: London
-        # WeatherAgent: The weather in London is currently rainy.
+        # User: What is the weather in Seattle?
+        # WeatherAgent: The weather in Seattle is rainy. If you would like to know more details or the forecast for 
+            another city, just let me know!
         """
 
 
