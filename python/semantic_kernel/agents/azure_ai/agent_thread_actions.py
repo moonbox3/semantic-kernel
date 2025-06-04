@@ -406,12 +406,11 @@ class AgentThreadActions:
             An async iterable of StreamingChatMessageContent.
         """
         arguments = KernelArguments() if arguments is None else KernelArguments(**arguments, **kwargs)
-        kernel = kernel or agent.kernel
         arguments = agent._merge_arguments(arguments)
 
-        tools = cls._get_tools(agent=agent, kernel=kernel)  # type: ignore
+        tools = cls._get_tools(agent=agent)  # type: ignore
 
-        base_instructions = await agent.format_instructions(kernel=kernel, arguments=arguments)
+        base_instructions = await agent.format_instructions(arguments=arguments)
 
         merged_instructions: str = ""
         if instructions_override is not None:
