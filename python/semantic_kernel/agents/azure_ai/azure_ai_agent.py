@@ -362,10 +362,10 @@ class AzureAIAgent(DeclarativeSpecMixin, Agent):
         arguments: "KernelArguments | None" = None,
         client: AIProjectClient,
         definition: AzureAIAgentModel,
-        kernel: "Kernel | None" = None,
         plugins: list[KernelPlugin | object] | dict[str, KernelPlugin | object] | None = None,
         polling_options: RunPollingOptions | None = None,
         prompt_template_config: "PromptTemplateConfig | None" = None,
+        tools: list[Any] | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the Azure AI Agent.
@@ -376,12 +376,14 @@ class AzureAIAgent(DeclarativeSpecMixin, Agent):
                 https://learn.microsoft.com/en-us/azure/ai-services/agents/quickstart?pivots=programming-language-python-azure
                 for details on how to create a new agent.
             definition: The AzureAI Agent model created via the AzureAI Project client.
-            kernel: The Kernel instance used if invoking plugins
             plugins: The plugins for the agent. If plugins are included along with a kernel, any plugins
                 that already exist in the kernel will be overwritten.
             polling_options: The polling options for the agent.
             prompt_template_config: The prompt template configuration. If this is provided along with
                 instructions, the prompt template will be used in place of the instructions.
+            tools: A list of tools to be used by the agent. Each tool should be an instance of FunctionTool or use
+                the FunctionTool (`@function_tool()`) decorator. If provided, these tools will be added to the agent's
+                tool map.
             **kwargs: Additional keyword arguments
         """
         args: dict[str, Any] = {
@@ -393,8 +395,6 @@ class AzureAIAgent(DeclarativeSpecMixin, Agent):
 
         if definition.id is not None:
             args["id"] = definition.id
-        if kernel is not None:
-            args["kernel"] = kernel
         if arguments is not None:
             args["arguments"] = arguments
         if (
@@ -421,6 +421,8 @@ class AzureAIAgent(DeclarativeSpecMixin, Agent):
                 args["instructions"] = prompt_template_config.template
         if polling_options is not None:
             args["polling_options"] = polling_options
+        if tools is not None:
+            args["tools"] = tools
         if kwargs:
             args.update(kwargs)
 
@@ -626,7 +628,6 @@ class AzureAIAgent(DeclarativeSpecMixin, Agent):
         *,
         thread: AgentThread | None = None,
         arguments: KernelArguments | None = None,
-        kernel: Kernel | None = None,
         model: str | None = None,
         instructions_override: str | None = None,
         additional_instructions: str | None = None,
@@ -650,7 +651,6 @@ class AzureAIAgent(DeclarativeSpecMixin, Agent):
                 a list of strings or ChatMessageContent.
             thread: The thread to use for the agent.
             arguments: The arguments for the agent.
-            kernel: The kernel to use for the agent.
             model: The model to use for the agent.
             instructions_override: Instructions to override the default instructions.
             additional_instructions: Additional instructions for the agent.
@@ -683,7 +683,6 @@ class AzureAIAgent(DeclarativeSpecMixin, Agent):
         else:
             arguments.update(kwargs)
 
-        kernel = kernel or self.kernel
         arguments = self._merge_arguments(arguments)
 
         run_level_params = {
@@ -708,7 +707,6 @@ class AzureAIAgent(DeclarativeSpecMixin, Agent):
         async for is_visible, response in AgentThreadActions.invoke(
             agent=self,
             thread_id=thread.id,
-            kernel=kernel,
             arguments=arguments,
             **run_level_params,  # type: ignore
         ):
@@ -731,7 +729,6 @@ class AzureAIAgent(DeclarativeSpecMixin, Agent):
         thread: AgentThread | None = None,
         on_intermediate_message: Callable[[ChatMessageContent], Awaitable[None]] | None = None,
         arguments: KernelArguments | None = None,
-        kernel: Kernel | None = None,
         model: str | None = None,
         instructions_override: str | None = None,
         additional_instructions: str | None = None,
@@ -756,7 +753,6 @@ class AzureAIAgent(DeclarativeSpecMixin, Agent):
             thread: The thread to use for the agent.
             on_intermediate_message: A callback function to handle intermediate steps of the agent's execution.
             arguments: The arguments for the agent.
-            kernel: The kernel to use for the agent.
             model: The model to use for the agent.
             instructions_override: Instructions to override the default instructions.
             additional_instructions: Additional instructions for the agent.
@@ -789,7 +785,6 @@ class AzureAIAgent(DeclarativeSpecMixin, Agent):
         else:
             arguments.update(kwargs)
 
-        kernel = kernel or self.kernel
         arguments = self._merge_arguments(arguments)
 
         run_level_params = {
@@ -813,7 +808,6 @@ class AzureAIAgent(DeclarativeSpecMixin, Agent):
         async for is_visible, message in AgentThreadActions.invoke(
             agent=self,
             thread_id=thread.id,
-            kernel=kernel,
             arguments=arguments,
             **run_level_params,  # type: ignore
         ):
@@ -893,7 +887,6 @@ class AzureAIAgent(DeclarativeSpecMixin, Agent):
         else:
             arguments.update(kwargs)
 
-        kernel = kernel or self.kernel
         arguments = self._merge_arguments(arguments)
 
         run_level_params = {
@@ -920,7 +913,6 @@ class AzureAIAgent(DeclarativeSpecMixin, Agent):
             agent=self,
             thread_id=thread.id,
             output_messages=collected_messages,
-            kernel=kernel,
             arguments=arguments,
             **run_level_params,  # type: ignore
         ):

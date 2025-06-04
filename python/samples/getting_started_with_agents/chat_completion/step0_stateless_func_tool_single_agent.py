@@ -5,12 +5,13 @@ import asyncio
 from semantic_kernel.agents import ChatCompletionAgent
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
 from semantic_kernel.functions.function_tools import function_tool
+from semantic_kernel.functions.kernel_arguments import KernelArguments
 
 
 @function_tool(description="Get the weather for a given city.")
-async def get_weather(city: str) -> str:
+async def get_weather(city: str, location: str | None = None) -> str:
     print(f"[TOOL INVOKE] Fetching weather for city: {city}")
-    return f"The weather in {city} is rainy."
+    return f"The weather for location {location} in {city} is rainy."
 
 
 @function_tool(description="Reverse a string.")
@@ -22,9 +23,10 @@ async def reverse_string(text: str) -> str:
 
 weather_agent = ChatCompletionAgent(
     service=OpenAIChatCompletion(),
-    name="GreeterAgent",
+    name="WeatherAgent",
     instructions="Use the provided tools, as required, to help answer the user's questions.",
     tools=[get_weather, reverse_string],
+    arguments=KernelArguments(location="USA"),
 )
 
 

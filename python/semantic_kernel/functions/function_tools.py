@@ -1,4 +1,5 @@
-# function_tools.py
+# Copyright (c) Microsoft. All rights reserved.
+
 import functools
 import inspect
 from typing import Awaitable, Callable, Generic, TypeVar

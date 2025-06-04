@@ -423,11 +423,28 @@ class Agent(KernelBaseModel, ABC):
         """
         pass
 
-    async def _execute_function_call(self, fcc: FunctionCallContent) -> ChatMessageContent:
+    @staticmethod
+    def tool_to_json_schema_spec(tool: FunctionTool) -> dict[str, Any]:
+        """Convert a FunctionTool to the JSON Schema function specification format."""
+        return {
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool.description or "",
+                "parameters": tool.model_json_schema(),
+            },
+        }
+
+    async def _execute_function_call(
+        self, fcc: FunctionCallContent, custom_args: KernelArguments | None = None
+    ) -> ChatMessageContent:
         """Resolve a function call to either a stateless FunctionTool or raise KeyError."""
         tool: FunctionTool[BaseModel, Any] | None = self.tool_map.get(fcc.function_name)
         if tool is not None:
             args: dict[str, Any] = json.loads(fcc.arguments) if fcc.arguments else {}
+            if custom_args:
+                # Merge custom_args with the function call arguments
+                args = {**args, **custom_args}
             args_obj: BaseModel = tool.input_model(**args)
             raw_result: Any = await tool.run(args_obj)
 
@@ -467,7 +484,7 @@ class Agent(KernelBaseModel, ABC):
 
     # region Instructions Management
 
-    async def format_instructions(self, kernel: Kernel, arguments: KernelArguments | None = None) -> str | None:
+    async def format_instructions(self, arguments: KernelArguments | None = None) -> str | None:
         """Format the instructions.
 
         Args:
@@ -483,7 +500,7 @@ class Agent(KernelBaseModel, ABC):
             self.prompt_template = KernelPromptTemplate(
                 prompt_template_config=PromptTemplateConfig(template=self.instructions)
             )
-        return await self.prompt_template.render(kernel, arguments)
+        return await self.prompt_template.render(arguments)
 
     def _merge_arguments(self, override_args: KernelArguments | None) -> KernelArguments:
         """Merge the arguments with the override arguments.

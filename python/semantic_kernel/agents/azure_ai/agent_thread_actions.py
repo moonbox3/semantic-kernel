@@ -11,7 +11,6 @@ from azure.ai.agents.models import (
     AsyncAgentEventHandler,
     AsyncAgentRunStream,
     BaseAsyncAgentEventHandler,
-    FunctionToolDefinition,
     ResponseFormatJsonSchemaType,
     RunStep,
     RunStepAzureAISearchToolCall,
@@ -54,13 +53,12 @@ from semantic_kernel.agents.azure_ai.azure_ai_agent_utils import AzureAIAgentUti
 from semantic_kernel.agents.open_ai.assistant_content_generation import merge_streaming_function_results
 from semantic_kernel.agents.open_ai.function_action_result import FunctionActionResult
 from semantic_kernel.agents.open_ai.run_polling_options import RunPollingOptions
-from semantic_kernel.connectors.ai.function_calling_utils import kernel_function_metadata_to_function_call_format
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.function_call_content import FunctionCallContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from semantic_kernel.exceptions.agent_exceptions import AgentInvokeException
 from semantic_kernel.functions import KernelArguments
-from semantic_kernel.functions.kernel_function_metadata import KernelFunctionMetadata
+from semantic_kernel.functions.function_tools import FunctionTool
 from semantic_kernel.utils.feature_stage_decorator import experimental
 
 if TYPE_CHECKING:
@@ -69,10 +67,6 @@ if TYPE_CHECKING:
     from semantic_kernel.agents.azure_ai.azure_ai_agent import AzureAIAgent
     from semantic_kernel.contents.chat_history import ChatHistory
     from semantic_kernel.contents.streaming_chat_message_content import StreamingChatMessageContent
-    from semantic_kernel.filters.auto_function_invocation.auto_function_invocation_context import (
-        AutoFunctionInvocationContext,
-    )
-    from semantic_kernel.kernel import Kernel
 
 _T = TypeVar("_T", bound="AgentThreadActions")
 
@@ -95,7 +89,6 @@ class AgentThreadActions:
         agent: "AzureAIAgent",
         thread_id: str,
         arguments: KernelArguments | None = None,
-        kernel: "Kernel | None" = None,
         # Run-level parameters:
         model: str | None = None,
         instructions_override: str | None = None,
@@ -143,11 +136,10 @@ class AgentThreadActions:
             A tuple of the visibility flag and the invoked message.
         """
         arguments = KernelArguments() if arguments is None else KernelArguments(**arguments, **kwargs)
-        kernel = kernel or agent.kernel
 
-        tools = cls._get_tools(agent=agent, kernel=kernel)  # type: ignore
+        tools = cls._get_tools(agent=agent)  # type: ignore
 
-        base_instructions = await agent.format_instructions(kernel=kernel, arguments=arguments)
+        base_instructions = await agent.format_instructions(arguments=arguments)
 
         merged_instructions: str = ""
         if instructions_override is not None:
@@ -212,9 +204,10 @@ class AgentThreadActions:
                     from semantic_kernel.contents.chat_history import ChatHistory
 
                     chat_history = ChatHistory() if kwargs.get("chat_history") is None else kwargs["chat_history"]
-                    _ = await cls._invoke_function_calls(
-                        kernel=kernel, fccs=fccs, chat_history=chat_history, arguments=arguments
-                    )
+                    results = await cls._invoke_function_calls(agent=agent, fccs=fccs, arguments=arguments)
+
+                    for function_result in results:
+                        chat_history.add_message(function_result)
 
                     tool_outputs = cls._format_tool_outputs(fccs, chat_history)
                     await agent.client.agents.runs.submit_tool_outputs(
@@ -371,7 +364,6 @@ class AgentThreadActions:
         additional_messages: "list[ChatMessageContent] | None" = None,
         arguments: KernelArguments | None = None,
         instructions_override: str | None = None,
-        kernel: "Kernel | None" = None,
         metadata: dict[str, str] | None = None,
         model: str | None = None,
         max_prompt_tokens: int | None = None,
@@ -396,7 +388,6 @@ class AgentThreadActions:
                 https://platform.openai.com/docs/api-reference/runs/createRun
             arguments: The kernel arguments.
             instructions_override: The instructions override.
-            kernel: The kernel.
             metadata: The metadata.
             model: The model.
             max_prompt_tokens: The max prompt tokens.
@@ -461,7 +452,6 @@ class AgentThreadActions:
             agent=agent,
             thread_id=thread_id,
             output_messages=output_messages,
-            kernel=kernel,
             arguments=arguments,
             function_steps=function_steps,
             active_messages=active_messages,
@@ -475,7 +465,6 @@ class AgentThreadActions:
         stream: AsyncAgentRunStream,
         agent: "AzureAIAgent",
         thread_id: str,
-        kernel: "Kernel",
         arguments: KernelArguments,
         function_steps: dict[str, FunctionCallContent],
         active_messages: dict[str, RunStep],
@@ -560,7 +549,6 @@ class AgentThreadActions:
                     run = cast(ThreadRun, event_data)
                     action_result = await cls._handle_streaming_requires_action(
                         agent_name=agent.name,
-                        kernel=kernel,
                         run=run,
                         function_steps=function_steps,
                         arguments=arguments,
@@ -800,45 +788,31 @@ class AgentThreadActions:
         return [tool for tool in new_tools if tool.get("function", {}).get("name") not in existing_names]
 
     @classmethod
-    def _get_tools(cls: type[_T], agent: "AzureAIAgent", kernel: "Kernel") -> list[dict[str, Any] | ToolDefinition]:
-        """Get the tools for the agent."""
+    def _get_tools(
+        cls: type[_T],
+        agent: "AzureAIAgent",
+    ) -> list[dict[str, Any] | ToolDefinition]:
         tools: list[Any] = list(agent.definition.tools)
-        funcs = kernel.get_full_list_of_function_metadata()
-        cls._validate_function_tools_registered(tools, funcs)
-        dict_defs = [kernel_function_metadata_to_function_call_format(f) for f in funcs]
-        deduped_defs = cls._deduplicate_tools(tools, dict_defs)
-        tools.extend(deduped_defs)
+        tools.extend([agent.tool_to_json_schema_spec(t) for t in agent.tool_map.values()])
+        cls._validate_tool_map_tools_registered(agent.tool_map, tools)
         return [cls._prepare_tool_definition(tool) for tool in tools]
 
     @staticmethod
-    def _validate_function_tools_registered(
-        tools: list[Any],
-        funcs: list[Any],
+    def _validate_tool_map_tools_registered(
+        tool_map: dict[str, FunctionTool],
+        tools: list[dict[str, Any]],
     ) -> None:
-        """Validate that all function tools are registered with the kernel."""
-        function_tool_names = set()
-        for tool in tools:
-            if isinstance(tool, FunctionToolDefinition):
-                agent_tool_func_name = getattr(tool.function, "name", None)
-                if agent_tool_func_name:
-                    function_tool_names.add(agent_tool_func_name)
+        """Validate that all FunctionTools in tool_map are present in the tools list."""
+        # Collect all function names from the JSON schema tools
+        tool_names = {tool["function"]["name"] for tool in tools if "function" in tool and "name" in tool["function"]}
+        # Collect all expected tool names from the tool_map
+        expected_tool_names = {tool.name for tool in tool_map.values()}
 
-        kernel_function_names = set()
-        for f in funcs:
-            kernel_func_name = (
-                f.fully_qualified_name
-                if isinstance(f, KernelFunctionMetadata)
-                else getattr(f, "full_qualified_name", None)
-            )
-            if kernel_func_name:
-                kernel_function_names.add(kernel_func_name)
-
-        missing_functions = function_tool_names - kernel_function_names
-        if missing_functions:
+        missing_tools = expected_tool_names - tool_names
+        if missing_tools:
             raise AgentInvokeException(
-                f"The following function tool(s) are defined on the agent but missing from the kernel: "
-                f"{sorted(missing_functions)}. "
-                f"Please ensure all required tools are registered with the kernel."
+                f"The following tool(s) are present in agent.tool_map but missing from the exported tools list: "
+                f"{sorted(missing_tools)}. Ensure all registered tools are advertised to the LLM."
             )
 
     @classmethod
@@ -907,21 +881,13 @@ class AgentThreadActions:
     @classmethod
     async def _invoke_function_calls(
         cls: type[_T],
-        kernel: "Kernel",
+        agent: "AzureAIAgent",
         fccs: list["FunctionCallContent"],
-        chat_history: "ChatHistory",
         arguments: KernelArguments,
-    ) -> list["AutoFunctionInvocationContext | None"]:
+    ) -> list["ChatMessageContent | None"]:
         """Invoke the function calls."""
         return await asyncio.gather(
-            *[
-                kernel.invoke_function_call(
-                    function_call=function_call,
-                    chat_history=chat_history,
-                    arguments=arguments,
-                )
-                for function_call in fccs
-            ],
+            *[agent._execute_function_call(fc, arguments) for fc in fccs],
         )
 
     @classmethod
@@ -947,7 +913,6 @@ class AgentThreadActions:
     async def _handle_streaming_requires_action(
         cls: type[_T],
         agent_name: str,
-        kernel: "Kernel",
         run: ThreadRun,
         function_steps: dict[str, "FunctionCallContent"],
         arguments: KernelArguments,
@@ -960,9 +925,7 @@ class AgentThreadActions:
             from semantic_kernel.contents.chat_history import ChatHistory
 
             chat_history = ChatHistory() if kwargs.get("chat_history") is None else kwargs["chat_history"]
-            results = await cls._invoke_function_calls(
-                kernel=kernel, fccs=fccs, chat_history=chat_history, arguments=arguments
-            )
+            results = await cls._invoke_function_calls(fccs=fccs, arguments=arguments)
 
             function_result_streaming_content = merge_streaming_function_results(
                 messages=chat_history.messages[-len(results) :],

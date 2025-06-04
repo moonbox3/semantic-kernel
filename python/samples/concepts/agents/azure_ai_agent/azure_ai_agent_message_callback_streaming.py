@@ -10,6 +10,7 @@ from semantic_kernel.agents import AzureAIAgent, AzureAIAgentSettings, AzureAIAg
 from semantic_kernel.contents import ChatMessageContent, FunctionCallContent, FunctionResultContent
 from semantic_kernel.core_plugins import MathPlugin
 from semantic_kernel.functions import kernel_function
+from semantic_kernel.functions.kernel_arguments import KernelArguments
 
 """
 This sample demonstrates how to create an Azure AI Agent and use it with the streaming `invoke_stream()` method.
@@ -78,6 +79,7 @@ async def main() -> None:
             client=client,
             definition=agent_definition,
             plugins=[MenuPlugin(), MathPlugin()],
+            arguments=KernelArguments(style="funny"),
         )
 
         # Create a thread for the agent

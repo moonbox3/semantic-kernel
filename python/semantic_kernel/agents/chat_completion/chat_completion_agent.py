@@ -27,7 +27,6 @@ from semantic_kernel.exceptions.agent_exceptions import (
     AgentInvokeException,
     AgentThreadOperationException,
 )
-from semantic_kernel.functions.function_tools import FunctionTool
 from semantic_kernel.functions.kernel_arguments import KernelArguments
 from semantic_kernel.functions.kernel_function import TEMPLATE_FORMAT_MAP
 from semantic_kernel.functions.kernel_plugin import KernelPlugin
@@ -454,10 +453,12 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
 
     async def _auto_invoke_loop(
         self,
+        *,
         chat_completion_service: ChatCompletionClientBase,
         chat_history: ChatHistory,
         settings: PromptExecutionSettings,
         max_attempts: int = 10,
+        arguments: KernelArguments | None = None,
     ) -> list[ChatMessageContent]:
         """Auto invoke loop."""
         for _ in range(max_attempts):
@@ -471,11 +472,11 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
             chat_history.add_message(assistant_msg)
 
             results: list[ChatMessageContent] = await asyncio.gather(*[
-                self._execute_function_call(fc) for fc in function_calls
+                self._execute_function_call(fc, arguments) for fc in function_calls
             ])
 
-            for chat_msg in results:
-                chat_history.add_message(chat_msg)
+            for function_result in results:
+                chat_history.add_message(function_result)
 
         settings.tool_choice = "none"
         return await chat_completion_service.get_chat_message_contents(chat_history, settings)
@@ -483,17 +484,6 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
     # endregion
 
     # region Helper Methods
-
-    def tool_to_json_schema_spec(self, tool: FunctionTool) -> dict[str, Any]:
-        """Convert a FunctionTool to the JSON Schema function specification format."""
-        return {
-            "type": "function",
-            "function": {
-                "name": tool.name,
-                "description": tool.description or "",
-                "parameters": tool.model_json_schema(),
-            },
-        }
 
     async def _inner_invoke(
         self,
@@ -530,12 +520,13 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
         logger.debug(f"[{type(self).__name__}] Invoking {type(self.service).__name__}.")
 
         settings.tool_choice = "auto"
-        settings.tools = [self.tool_to_json_schema_spec(t) for t in self.tool_map.values()]
+        settings.tools = [Agent.tool_to_json_schema_spec(t) for t in self.tool_map.values()]
 
         responses = await self._auto_invoke_loop(
-            self.service,
-            agent_chat_history,
-            settings,
+            chat_completion_service=self.service,
+            chat_history=agent_chat_history,
+            settings=settings,
+            arguments=arguments,
         )
 
         logger.debug(
