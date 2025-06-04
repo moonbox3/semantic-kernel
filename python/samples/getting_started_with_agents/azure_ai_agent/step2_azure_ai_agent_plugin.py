@@ -16,9 +16,9 @@ questions about a sample menu using a Semantic Kernel Plugin.
 
 # Define a sample plugin for the sample
 @function_tool(description="Get the weather for a given city.")
-async def get_weather(city: str) -> str:
-    print(f"[TOOL INVOKE] Fetching weather for city: {city}")
-    return f"The weather in {city} is rainy."
+async def get_weather(city: str, location: str | None = None) -> str:
+    print(f"[TOOL INVOKE] Fetching weather for city: {city}, and location: {location}")
+    return f"The weather for location {location} in {city} is rainy."
 
 
 @function_tool(description="Reverse a string.")
@@ -32,7 +32,7 @@ async def reverse_string(text: str) -> str:
 USER_INPUTS = [
     "What is the weather in New York?",
     "Get the current weather in Seattle and then reverse that word.",
-    "What is the weather in London?",
+    "What is the weather in Seattle?",
 ]
 
 
@@ -53,7 +53,7 @@ async def main() -> None:
             client=client,
             definition=agent_definition,
             tools=[get_weather, reverse_string],
-            arguments=KernelArguments(style="funny"),
+            arguments=KernelArguments(location="USA"),
         )
 
         # 3. Create a thread for the agent
