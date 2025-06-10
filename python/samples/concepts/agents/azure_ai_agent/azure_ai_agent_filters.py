@@ -5,6 +5,7 @@ import asyncio
 from azure.identity.aio import DefaultAzureCredential
 
 from semantic_kernel.agents import AzureAIAgent, AzureAIAgentSettings
+from semantic_kernel.contents import ChatMessageContent, FunctionCallContent, FunctionResultContent
 from semantic_kernel.filters.agent_contexts import AutoFunctionInvocationContext, PromptRenderContext
 from semantic_kernel.filters.filter_types import FilterTypes
 from semantic_kernel.functions.function_tools import function_tool
@@ -36,6 +37,16 @@ USER_INPUTS = [
     "Get the current weather in Seattle and then reverse that word.",
     "What is the weather in Seattle?",
 ]
+
+
+async def handle_intermediate_steps(message: ChatMessageContent) -> None:
+    for item in message.items or []:
+        if isinstance(item, FunctionResultContent):
+            print(f"Function Result:> {item.result} for function: {item.name}")
+        elif isinstance(item, FunctionCallContent):
+            print(f"Function Call:> {item.name} with arguments: {item.arguments}")
+        else:
+            print(f"{item}")
 
 
 async def main() -> None:
@@ -87,8 +98,9 @@ async def main() -> None:
                 async for response in agent.invoke(
                     messages=user_input,
                     thread=thread,
+                    on_intermediate_message=handle_intermediate_steps,
                 ):
-                    print(f"# {response.name}: {response}")
+                    print(f"{response}", flush=True, end="")
                     thread = response.thread
                 print()
         finally:

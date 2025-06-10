@@ -257,6 +257,7 @@ class AgentThreadActions:
                         for tool_call in tool_call_details.tool_calls:
                             is_visible = False
                             content: "ChatMessageContent | None" = None
+                            print(f"Generating content for tool call type `{tool_call.type}`, ")
                             match tool_call.type:
                                 case AgentsNamedToolChoiceType.CODE_INTERPRETER:
                                     logger.debug(
@@ -277,6 +278,7 @@ class AgentThreadActions:
                                         f"and thread `{thread_id}`"
                                     )
                                     function_step = function_steps.get(tool_call.id)
+                                    print(f"Function step: {function_step}")
                                     assert function_step is not None  # nosec
                                     content = generate_function_result_content(
                                         agent_name=agent.name,
@@ -511,6 +513,9 @@ class AgentThreadActions:
                     details = run_step_event.delta.step_details
                     if not details:
                         continue
+                    print(
+                        f"Run step delta event for agent `{agent.name}`, thread `{thread_id}` with details: {details}"
+                    )
                     if isinstance(details, RunStepDeltaToolCallObject) and details.tool_calls:
                         content_is_visible = False
                         for tool_call in details.tool_calls:
@@ -559,7 +564,7 @@ class AgentThreadActions:
                     )
                     run = cast(ThreadRun, event_data)
                     action_result = await cls._handle_streaming_requires_action(
-                        agent_name=agent.name,
+                        agent=agent,
                         run=run,
                         function_steps=function_steps,
                         arguments=arguments,
@@ -945,7 +950,7 @@ class AgentThreadActions:
     @classmethod
     async def _handle_streaming_requires_action(
         cls: type[_T],
-        agent_name: str,
+        agent: "AzureAIAgent",
         run: ThreadRun,
         function_steps: dict[str, "FunctionCallContent"],
         arguments: KernelArguments,
@@ -954,15 +959,17 @@ class AgentThreadActions:
         """Handle the requires action event for a streaming run."""
         fccs = get_function_call_contents(run, function_steps)
         if fccs:
-            function_call_streaming_content = generate_function_call_streaming_content(agent_name=agent_name, fccs=fccs)
+            function_call_streaming_content = generate_function_call_streaming_content(agent_name=agent.name, fccs=fccs)
             from semantic_kernel.contents.chat_history import ChatHistory
 
             chat_history = ChatHistory() if kwargs.get("chat_history") is None else kwargs["chat_history"]
-            results = await cls._invoke_function_calls(fccs=fccs, arguments=arguments)
+            results = await cls._invoke_function_calls(
+                agent=agent, fccs=fccs, chat_history=chat_history, arguments=arguments
+            )
 
             function_result_streaming_content = merge_streaming_function_results(
                 messages=chat_history.messages[-len(results) :],
-                name=agent_name,
+                name=agent.name,
             )
             tool_outputs = cls._format_tool_outputs(fccs, chat_history)
             return FunctionActionResult(

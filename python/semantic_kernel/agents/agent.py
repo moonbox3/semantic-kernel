@@ -8,6 +8,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable, Awaitable, Callable, Iterable, Sequence
 from contextlib import AbstractAsyncContextManager
+from copy import deepcopy
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Generic, Protocol, TypeVar, runtime_checkable
 
 import yaml
@@ -504,7 +505,9 @@ class Agent(AgentFilterExtension, KernelBaseModel, ABC):
         """
 
         async def _inner(ctx: AutoFunctionInvocationContext) -> None:
-            ctx.function_result = await self._execute_function_call(fcc, arguments)
+            result = await self._execute_function_call(fcc, arguments)
+            # Snapshot the tool's return value so later mutations don't leak back
+            ctx.function_result = deepcopy(result)
 
         _rebuild_auto_function_invocation_context()
         afi_ctx = AutoFunctionInvocationContext(

@@ -152,6 +152,7 @@ class FunctionResultContent(KernelContent):
             call_id=function_call_content.call_id if hasattr(function_call_content, "call_id") else None,
             inner_content=inner_content,
             result=res,
+            name=function_call_content.name,
             function_name=function_call_content.function_name,
             plugin_name=function_call_content.plugin_name,
             ai_model_id=function_call_content.ai_model_id,
