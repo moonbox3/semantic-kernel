@@ -7,7 +7,7 @@ from azure.identity.aio import DefaultAzureCredential
 
 from semantic_kernel.agents import AzureAIAgent, AzureAIAgentSettings, AzureAIAgentThread
 from semantic_kernel.contents import ChatMessageContent, FunctionCallContent, FunctionResultContent
-from semantic_kernel.functions import kernel_function
+from semantic_kernel.functions.function_tools import function_tool
 
 """
 This sample demonstrates how to create an Azure AI Agent and invoke it using the non-streaming `invoke()` method.
@@ -21,23 +21,20 @@ via the callback function while the invocation is still in progress.
 """
 
 
-# Define a sample plugin for the sample
-class MenuPlugin:
-    """A sample Menu Plugin used for the concept sample."""
+@function_tool(description="Provides a list of specials from the menu.")
+def get_specials() -> Annotated[str, "Returns the specials from the menu."]:
+    return """
+    Special Soup: Clam Chowder
+    Special Salad: Cobb Salad
+    Special Drink: Chai Tea
+    """
 
-    @kernel_function(description="Provides a list of specials from the menu.")
-    def get_specials(self) -> Annotated[str, "Returns the specials from the menu."]:
-        return """
-        Special Soup: Clam Chowder
-        Special Salad: Cobb Salad
-        Special Drink: Chai Tea
-        """
 
-    @kernel_function(description="Provides the price of the requested menu item.")
-    def get_item_price(
-        self, menu_item: Annotated[str, "The name of the menu item."]
-    ) -> Annotated[str, "Returns the price of the menu item."]:
-        return "$9.99"
+@function_tool(description="Provides the price of the requested menu item.")
+def get_item_price(
+    menu_item: Annotated[str, "The name of the menu item."],
+) -> Annotated[str, "Returns the price of the menu item."]:
+    return "$9.99"
 
 
 # This callback function will be called for each intermediate message,
@@ -75,7 +72,7 @@ async def main() -> None:
         agent = AzureAIAgent(
             client=client,
             definition=agent_definition,
-            plugins=[MenuPlugin()],  # add the sample plugin to the agent
+            tools=[get_specials, get_item_price],  # add the sample plugin to the agent
         )
 
         # Create a thread for the agent
@@ -84,7 +81,7 @@ async def main() -> None:
         thread: AzureAIAgentThread = None
 
         user_inputs = [
-            "Hello",
+            # "Hello",
             "What is the special soup?",
             "How much does that cost?",
             "Thank you",

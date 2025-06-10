@@ -257,7 +257,6 @@ class AgentThreadActions:
                         for tool_call in tool_call_details.tool_calls:
                             is_visible = False
                             content: "ChatMessageContent | None" = None
-                            print(f"Generating content for tool call type `{tool_call.type}`, ")
                             match tool_call.type:
                                 case AgentsNamedToolChoiceType.CODE_INTERPRETER:
                                     logger.debug(
@@ -278,7 +277,6 @@ class AgentThreadActions:
                                         f"and thread `{thread_id}`"
                                     )
                                     function_step = function_steps.get(tool_call.id)
-                                    print(f"Function step: {function_step}")
                                     assert function_step is not None  # nosec
                                     content = generate_function_result_content(
                                         agent_name=agent.name,
@@ -917,14 +915,8 @@ class AgentThreadActions:
         results: list[AutoFunctionInvocationContext] = await asyncio.gather(*tasks)
 
         # Construct FunctionResultContent and append messages to chat_history
-        for fc, afi_ctx in zip(fccs, results):
-            frc = FunctionResultContent.from_function_call_content_and_result(
-                function_call_content=fc,
-                result=afi_ctx.function_result,
-            )
-            is_streaming = any(isinstance(msg, StreamingChatMessageContent) for msg in chat_history.messages)
-            message = frc.to_streaming_chat_message_content() if is_streaming else frc.to_chat_message_content()
-            chat_history.add_message(message=message)
+        for result in results:
+            chat_history.add_message(result.function_result)
 
         return results
 
@@ -933,8 +925,6 @@ class AgentThreadActions:
         cls: type[_T], fccs: list["FunctionCallContent"], chat_history: "ChatHistory"
     ) -> list[dict[str, str]]:
         """Format the tool outputs for submission."""
-        from semantic_kernel.contents.function_result_content import FunctionResultContent
-
         tool_call_lookup = {
             tool_call.id: tool_call
             for message in chat_history.messages

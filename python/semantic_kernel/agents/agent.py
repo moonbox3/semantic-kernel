@@ -3,6 +3,7 @@
 import importlib
 import json
 import logging
+import numbers
 import threading
 import uuid
 from abc import ABC, abstractmethod
@@ -499,14 +500,10 @@ class Agent(AgentFilterExtension, KernelBaseModel, ABC):
         request_index: int | None = None,
         filter_type: FilterTypes = FilterTypes.AUTO_FUNCTION_INVOCATION,
     ) -> AutoFunctionInvocationContext:
-        """Invokes the function tool for a given FunctionCallContent, applying filter stack.
-
-        This is now unified and available to all agent types.
-        """
+        """Invokes the function tool for a given FunctionCallContent, applying filter stack."""
 
         async def _inner(ctx: AutoFunctionInvocationContext) -> None:
             result = await self._execute_function_call(fcc, arguments)
-            # Snapshot the tool's return value so later mutations don't leak back
             ctx.function_result = deepcopy(result)
 
         _rebuild_auto_function_invocation_context()
@@ -523,6 +520,31 @@ class Agent(AgentFilterExtension, KernelBaseModel, ABC):
         )
         stack = self.construct_call_stack(filter_type=filter_type, inner_function=_inner)
         await stack(afi_ctx)
+
+        result = afi_ctx.function_result
+
+        # Normalize to ChatMessageContent (with FunctionResultContent inside) no matter what the filter returned
+        def normalize_function_result(result, function_call_content):
+            if isinstance(result, ChatMessageContent):
+                return result
+            if isinstance(result, FunctionResultContent):
+                return result.to_chat_message_content()
+            if isinstance(result, (str, bool, numbers.Number)):
+                frc = FunctionResultContent.from_function_call_content_and_result(
+                    function_call_content=function_call_content,
+                    result=str(result),
+                )
+                return frc.to_chat_message_content()
+            if isinstance(result, dict):
+                return ChatMessageContent.model_validate(result)
+            raise TypeError(
+                f"function_result must be ChatMessageContent, FunctionResultContent, or str, not {type(result).__name__}"
+            )
+
+        if result is not None:
+            message = normalize_function_result(result, fcc)
+            afi_ctx.function_result = message
+
         return afi_ctx
 
     async def _apply_prompt_filters(

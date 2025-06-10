@@ -271,7 +271,7 @@ def generate_function_result_content(
     function_call_content.items.append(
         FunctionResultContent(
             function_name=function_step.function_name,
-            plugin_name=function_step.plugin_name,
+            name=function_step.function_name,
             id=function_step.id,
             result=tool_call.function.get("output"),  # type: ignore
         )
