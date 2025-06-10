@@ -537,9 +537,7 @@ class Agent(AgentFilterExtension, KernelBaseModel, ABC):
                 return frc.to_chat_message_content()
             if isinstance(result, dict):
                 return ChatMessageContent.model_validate(result)
-            raise TypeError(
-                f"function_result must be ChatMessageContent, FunctionResultContent, or str, not {type(result).__name__}"
-            )
+            raise TypeError(f"Unexpected type: {type(result).__name__}")
 
         if result is not None:
             message = normalize_function_result(result, fcc)
