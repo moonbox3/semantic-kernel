@@ -30,7 +30,7 @@ class FunctionResult(KernelBaseModel):
 
     """
 
-    function: KernelFunctionMetadata
+    function: KernelFunctionMetadata | Any
     value: Any
     rendered_prompt: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)

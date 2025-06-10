@@ -5,15 +5,11 @@ from typing import TYPE_CHECKING
 from semantic_kernel.kernel_pydantic import KernelBaseModel
 
 if TYPE_CHECKING:
-    from semantic_kernel.functions.kernel_arguments import KernelArguments
-    from semantic_kernel.functions.kernel_function import KernelFunction
-    from semantic_kernel.kernel import Kernel
+    pass
 
 
 class FilterContextBase(KernelBaseModel):
     """Base class for Kernel Filter Contexts."""
 
-    function: "KernelFunction"
-    kernel: "Kernel"
-    arguments: "KernelArguments"
+    # Temp removal for POC
     is_streaming: bool = False

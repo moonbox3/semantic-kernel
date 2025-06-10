@@ -14,12 +14,26 @@ import yaml
 from pydantic import BaseModel, Field, model_validator
 
 from semantic_kernel.agents.channels.agent_channel import AgentChannel
+from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.contents.chat_message_content import CMC_ITEM_TYPES, ChatMessageContent
 from semantic_kernel.contents.function_call_content import FunctionCallContent
 from semantic_kernel.contents.function_result_content import FunctionResultContent
 from semantic_kernel.contents.streaming_chat_message_content import StreamingChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from semantic_kernel.exceptions.agent_exceptions import AgentExecutionException, AgentInitializationException
+from semantic_kernel.filters.agent_contexts import (
+    AutoFunctionInvocationContext,
+    FunctionInvocationContext,
+    PromptRenderContext,
+)
+from semantic_kernel.filters.agent_filter_extension import (
+    AgentFilterExtension,
+    _rebuild_auto_function_invocation_context,
+    _rebuild_function_invocation_context,
+    _rebuild_prompt_render_context,
+)
+from semantic_kernel.filters.filter_types import FilterTypes
+from semantic_kernel.functions.function_result import FunctionResult
 from semantic_kernel.functions.function_tools import FunctionTool, function_tool
 from semantic_kernel.functions.kernel_arguments import KernelArguments
 from semantic_kernel.functions.kernel_plugin import KernelPlugin
@@ -245,7 +259,7 @@ class AgentResponseItem(KernelBaseModel, Generic[TMessage]):
 # region Agent Base Class
 
 
-class Agent(KernelBaseModel, ABC):
+class Agent(AgentFilterExtension, KernelBaseModel, ABC):
     """Base abstraction for all Semantic Kernel agents.
 
     An agent instance may participate in one or more conversations.
@@ -436,25 +450,96 @@ class Agent(KernelBaseModel, ABC):
         }
 
     async def _execute_function_call(
-        self, fcc: FunctionCallContent, custom_args: KernelArguments | None = None
+        self,
+        fcc: FunctionCallContent,
+        custom_args: KernelArguments | None = None,
     ) -> ChatMessageContent:
-        """Resolve a function call to either a stateless FunctionTool or raise KeyError."""
+        """Execute a function call and honor FUNCTION_INVOCATION filters."""
         tool: FunctionTool[BaseModel, Any] | None = self.tool_map.get(fcc.function_name)
-        if tool is not None:
-            args: dict[str, Any] = json.loads(fcc.arguments) if fcc.arguments else {}
-            if custom_args:
-                # Merge custom_args with the function call arguments
-                args = {**args, **custom_args}
-            args_obj: BaseModel = tool.input_model(**args)
+        if tool is None:
+            raise KeyError(f"No tool or kernel function named '{fcc.function_name}'")
+
+        call_args: dict[str, Any] = json.loads(fcc.arguments) if fcc.arguments else {}
+        if custom_args:
+            call_args |= dict(custom_args)
+
+        async def _inner(ctx: FunctionInvocationContext) -> None:
+            args_obj: BaseModel = tool.input_model(**call_args)
             raw_result: Any = await tool.run(args_obj)
+            ctx.result = FunctionResult(function=tool, value=raw_result)  # type: ignore
 
-            frc = FunctionResultContent.from_function_call_content_and_result(
-                function_call_content=fcc,
-                result=raw_result,
-            )
-            return frc.to_chat_message_content()
+        # Build context and execute filter chain
+        _rebuild_function_invocation_context()
+        fi_ctx = FunctionInvocationContext(
+            agent=self,
+            function=tool,  # type: ignore
+            arguments=custom_args or KernelArguments(),
+            is_streaming=False,
+        )
+        stack = self.construct_call_stack(filter_type=FilterTypes.FUNCTION_INVOCATION, inner_function=_inner)
+        await stack(fi_ctx)
 
-        raise KeyError(f"No tool or kernel function named '{fcc.function_name}'")
+        # If filters replaced the result, respect that
+        result_value = fi_ctx.result.value if fi_ctx.result else None
+
+        frc = FunctionResultContent.from_function_call_content_and_result(
+            function_call_content=fcc,
+            result=result_value,
+        )
+        return frc.to_chat_message_content()
+
+    async def _invoke_function_call_with_filters(
+        self,
+        fcc: FunctionCallContent,
+        chat_history: ChatHistory | None = None,
+        arguments: KernelArguments | None = None,
+        *,
+        sequence_index: int | None = None,
+        request_index: int | None = None,
+        filter_type: FilterTypes = FilterTypes.AUTO_FUNCTION_INVOCATION,
+    ) -> AutoFunctionInvocationContext:
+        """Invokes the function tool for a given FunctionCallContent, applying filter stack.
+
+        This is now unified and available to all agent types.
+        """
+
+        async def _inner(ctx: AutoFunctionInvocationContext) -> None:
+            ctx.function_result = await self._execute_function_call(fcc, arguments)
+
+        _rebuild_auto_function_invocation_context()
+        afi_ctx = AutoFunctionInvocationContext(
+            agent=self,
+            function=fcc,
+            function_call=fcc,
+            chat_history=chat_history,
+            arguments=arguments or KernelArguments(),
+            request_sequence_index=request_index,
+            function_sequence_index=sequence_index,
+            function_result=None,
+            terminate=False,
+        )
+        stack = self.construct_call_stack(filter_type=filter_type, inner_function=_inner)
+        await stack(afi_ctx)
+        return afi_ctx
+
+    async def _apply_prompt_filters(
+        self, arguments: KernelArguments, is_streaming: bool = False
+    ) -> PromptRenderContext:
+        """Render the prompt using the agent's prompt template and apply any prompt rendering filters."""
+        _rebuild_prompt_render_context()
+        pr_ctx = PromptRenderContext(
+            agent=self,
+            arguments=arguments,
+            is_streaming=is_streaming,
+        )
+        stack = self.construct_call_stack(
+            filter_type=FilterTypes.PROMPT_RENDERING, inner_function=self._inner_render_prompt
+        )
+        await stack(pr_ctx)
+        return pr_ctx
+
+    async def _inner_render_prompt(self, context: PromptRenderContext) -> None:
+        context.rendered_prompt = await self.format_instructions(context.arguments)
 
     # endregion
 

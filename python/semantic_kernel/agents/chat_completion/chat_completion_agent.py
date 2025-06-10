@@ -13,6 +13,7 @@ from semantic_kernel.agents import Agent, AgentResponseItem, AgentThread, Declar
 from semantic_kernel.agents.channels.agent_channel import AgentChannel
 from semantic_kernel.agents.channels.chat_history_channel import ChatHistoryChannel
 from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.connectors.ai.function_calling_utils import merge_function_results
 from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
 from semantic_kernel.connectors.ai.prompt_execution_settings import PromptExecutionSettings
 from semantic_kernel.contents.chat_history import ChatHistory
@@ -386,8 +387,8 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
 
         agent_chat_history = await self._prepare_agent_chat_history(
             history=chat_history,
-            kernel=kernel,
             arguments=arguments,
+            is_streaming=True,
         )
 
         message_count_before_completion = len(agent_chat_history)
@@ -460,24 +461,42 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
         max_attempts: int = 10,
         arguments: KernelArguments | None = None,
     ) -> list[ChatMessageContent]:
-        """Auto invoke loop."""
-        for _ in range(max_attempts):
-            completions = await chat_completion_service.get_chat_message_contents(chat_history, settings)
+        """Loop until the model stops emitting tool calls or until filters terminate."""
+        for attempt_idx in range(max_attempts):
+            completions = await chat_completion_service.get_chat_message_contents(
+                chat_history,
+                settings,
+            )
             assistant_msg = completions[0]
-
-            function_calls = [it for it in assistant_msg.items if isinstance(it, FunctionCallContent)]
-            if not function_calls:
+            f_calls = [it for it in assistant_msg.items if isinstance(it, FunctionCallContent)]
+            if not f_calls:
                 return completions
 
             chat_history.add_message(assistant_msg)
 
-            results: list[ChatMessageContent] = await asyncio.gather(*[
-                self._execute_function_call(fc, arguments) for fc in function_calls
+            # Run all function calls concurrently
+            results = await asyncio.gather(*[
+                self._invoke_function_call_with_filters(
+                    fcc, chat_history, arguments, sequence_index=seq_idx, request_index=attempt_idx
+                )
+                for seq_idx, fcc in enumerate(f_calls)
             ])
 
-            for function_result in results:
-                chat_history.add_message(function_result)
+            for fcc, afi_ctx in zip(f_calls, results):
+                frc = FunctionResultContent.from_function_call_content_and_result(
+                    function_call_content=fcc,
+                    result=afi_ctx.function_result,
+                )
+                is_streaming = any(
+                    isinstance(message, StreamingChatMessageContent) for message in chat_history.messages
+                )
+                message = frc.to_streaming_chat_message_content() if is_streaming else frc.to_chat_message_content()
+                chat_history.add_message(message=message)
 
+                if afi_ctx.terminate and afi_ctx.function_result is not None:
+                    return merge_function_results(chat_history.messages[-1:])
+
+        # Failsafe: give up on tools, ask model for plain answer
         settings.tool_choice = "none"
         return await chat_completion_service.get_chat_message_contents(chat_history, settings)
 
@@ -555,12 +574,28 @@ class ChatCompletionAgent(DeclarativeSpecMixin, Agent):
                 await thread.on_new_message(response)
             yield response
 
-    async def _prepare_agent_chat_history(self, history: ChatHistory, arguments: KernelArguments) -> ChatHistory:
-        """Prepare the agent chat history from the input history by adding the formatted instructions."""
-        formatted_instructions = await self.format_instructions(arguments)
-        messages = []
-        if formatted_instructions:
-            messages.append(ChatMessageContent(role=AuthorRole.SYSTEM, content=formatted_instructions, name=self.name))
+    async def _prepare_agent_chat_history(
+        self,
+        history: ChatHistory,
+        arguments: KernelArguments,
+        is_streaming: bool = False,
+    ) -> ChatHistory:
+        """Return a ChatHistory that includes system instructions after prompt-render filters."""
+        pr_ctx = await self._apply_prompt_filters(arguments=arguments, is_streaming=is_streaming)
+
+        final_instructions = pr_ctx.rendered_prompt
+
+        # 3. Assemble the final chat history
+        messages: list[ChatMessageContent] = []
+        if final_instructions:
+            messages.append(
+                ChatMessageContent(
+                    role=AuthorRole.SYSTEM,
+                    content=final_instructions,
+                    name=self.name,
+                )
+            )
+
         if history.messages:
             messages.extend(history.messages)
 

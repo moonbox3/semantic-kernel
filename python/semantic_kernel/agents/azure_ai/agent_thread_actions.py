@@ -53,8 +53,11 @@ from semantic_kernel.agents.azure_ai.azure_ai_agent_utils import AzureAIAgentUti
 from semantic_kernel.agents.open_ai.assistant_content_generation import merge_streaming_function_results
 from semantic_kernel.agents.open_ai.function_action_result import FunctionActionResult
 from semantic_kernel.agents.open_ai.run_polling_options import RunPollingOptions
+from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.function_call_content import FunctionCallContent
+from semantic_kernel.contents.function_result_content import FunctionResultContent
+from semantic_kernel.contents.streaming_chat_message_content import StreamingChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from semantic_kernel.exceptions.agent_exceptions import AgentInvokeException
 from semantic_kernel.functions import KernelArguments
@@ -65,8 +68,7 @@ if TYPE_CHECKING:
     from azure.ai.projects.aio import AIProjectClient
 
     from semantic_kernel.agents.azure_ai.azure_ai_agent import AzureAIAgent
-    from semantic_kernel.contents.chat_history import ChatHistory
-    from semantic_kernel.contents.streaming_chat_message_content import StreamingChatMessageContent
+    from semantic_kernel.filters.agent_contexts import AutoFunctionInvocationContext
 
 _T = TypeVar("_T", bound="AgentThreadActions")
 
@@ -139,7 +141,8 @@ class AgentThreadActions:
 
         tools = cls._get_tools(agent=agent)  # type: ignore
 
-        base_instructions = await agent.format_instructions(arguments=arguments)
+        prompt_render_ctx = await agent._apply_prompt_filters(arguments=arguments)
+        base_instructions = prompt_render_ctx.rendered_prompt
 
         merged_instructions: str = ""
         if instructions_override is not None:
@@ -204,10 +207,12 @@ class AgentThreadActions:
                     from semantic_kernel.contents.chat_history import ChatHistory
 
                     chat_history = ChatHistory() if kwargs.get("chat_history") is None else kwargs["chat_history"]
-                    results = await cls._invoke_function_calls(agent=agent, fccs=fccs, arguments=arguments)
+                    _ = await cls._invoke_function_calls(
+                        agent=agent, fccs=fccs, chat_history=chat_history, arguments=arguments
+                    )
 
-                    for function_result in results:
-                        chat_history.add_message(function_result)
+                    # Note: we cannot simply yield output here and kick out of the operations early if the filter's
+                    # terminate is set to True. The service expects tool outputs to be submitted.
 
                     tool_outputs = cls._format_tool_outputs(fccs, chat_history)
                     await agent.client.agents.runs.submit_tool_outputs(
@@ -413,7 +418,8 @@ class AgentThreadActions:
 
         tools = cls._get_tools(agent=agent)  # type: ignore
 
-        base_instructions = await agent.format_instructions(arguments=arguments)
+        prompt_render_ctx = await agent._apply_prompt_filters(arguments=arguments, is_streaming=True)
+        base_instructions = prompt_render_ctx.rendered_prompt
 
         merged_instructions: str = ""
         if instructions_override is not None:
@@ -888,12 +894,34 @@ class AgentThreadActions:
         cls: type[_T],
         agent: "AzureAIAgent",
         fccs: list["FunctionCallContent"],
+        chat_history: "ChatHistory",
         arguments: KernelArguments,
-    ) -> list["ChatMessageContent | None"]:
-        """Invoke the function calls."""
-        return await asyncio.gather(
-            *[agent._execute_function_call(fc, arguments) for fc in fccs],
-        )
+    ) -> list["AutoFunctionInvocationContext | None"]:
+        """Invoke the function calls, emit results to chat_history, and return the invocation contexts."""
+        # Launch all filter-invocations concurrently
+        tasks = [
+            agent._invoke_function_call_with_filters(
+                fc,
+                chat_history=chat_history,
+                arguments=arguments,
+                sequence_index=idx,
+                request_index=0,
+            )
+            for idx, fc in enumerate(fccs)
+        ]
+        results: list[AutoFunctionInvocationContext] = await asyncio.gather(*tasks)
+
+        # Construct FunctionResultContent and append messages to chat_history
+        for fc, afi_ctx in zip(fccs, results):
+            frc = FunctionResultContent.from_function_call_content_and_result(
+                function_call_content=fc,
+                result=afi_ctx.function_result,
+            )
+            is_streaming = any(isinstance(msg, StreamingChatMessageContent) for msg in chat_history.messages)
+            message = frc.to_streaming_chat_message_content() if is_streaming else frc.to_chat_message_content()
+            chat_history.add_message(message=message)
+
+        return results
 
     @classmethod
     def _format_tool_outputs(
