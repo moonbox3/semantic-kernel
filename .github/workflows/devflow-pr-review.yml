@@ -111,6 +111,7 @@ jobs:
 
       - name: Classify PR relevance
         id: spam
+        shell: bash
         working-directory: ${{ env.DEVFLOW_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -120,11 +121,28 @@ jobs:
           PR_REPO: ${{ steps.pr.outputs.repo }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         run: |
-          uv run python scripts/classify_pr_spam.py \
-            --repo "$PR_REPO" \
-            --pr-number "$PR_NUMBER" \
-            --repo-path "${TARGET_REPO_PATH}" \
-            --apply-labels
+          if output=$(
+            uv run python scripts/classify_pr_spam.py \
+              --repo "$PR_REPO" \
+              --pr-number "$PR_NUMBER" \
+              --repo-path "${TARGET_REPO_PATH}" \
+              --apply-labels 2>&1
+          ); then
+            printf '%s\n' "$output"
+            exit 0
+          else
+            status=$?
+          fi
+
+          printf '%s\n' "$output"
+
+          if grep -Fq "The listed users cannot be searched either because the users do not exist or you do not have permission to view the users." <<<"$output"; then
+            echo "::warning::Skipping PR relevance lookup failure caused by an unsearchable GitHub user; continuing with review."
+            echo "decision=allow" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          exit "$status"
 
       - name: Stop after spam gate
         if: ${{ steps.spam.outputs.decision != 'allow' }}
